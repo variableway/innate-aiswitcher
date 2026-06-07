@@ -22,6 +22,7 @@ import (
 	"github.com/variableway/innate-aiswitcher/internal/adapter"
 	"github.com/variableway/innate-aiswitcher/internal/configfile"
 	"github.com/variableway/innate-aiswitcher/internal/httpcheck"
+	"github.com/variableway/innate-aiswitcher/internal/projectconfig"
 	"github.com/variableway/innate-aiswitcher/internal/store"
 	"github.com/variableway/innate-aiswitcher/internal/templates"
 	"github.com/variableway/innate-aiswitcher/internal/tui"
@@ -72,6 +73,7 @@ func NewCLI() *cobra.Command {
 		startCommand(getPB),
 		testCommand(getPB),
 		configCommand(getPB),
+		initCommand(getPB),
 		serveCommand(getPB, &opts),
 	)
 	return cmd
@@ -121,6 +123,7 @@ func NewWithOptions(opts Options) *pocketbase.PocketBase {
 		startCommand(getPB),
 		testCommand(getPB),
 		configCommand(getPB),
+		initCommand(getPB),
 	)
 	return pb
 }
@@ -310,12 +313,7 @@ func providerCommand(getPB PBGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			for _, preset := range presets {
-				for _, option := range preset.URLOptions {
-					provider := templates.ProviderFromPreset(preset, option, "")
-					fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\t%s\t%s\tendpoints=%s\n", provider.Slug, provider.Name, provider.APIProtocol, provider.DefaultModel, provider.BaseURL, formatStringMap(provider.Endpoints))
-				}
-			}
+			tui.PrintPresets(presets)
 			return nil
 		},
 	}
@@ -383,10 +381,11 @@ func startCommand(getPB PBGetter) *cobra.Command {
 	var dryRun bool
 	var terminal string
 	var cwd string
+	var ignoreProject bool
 	cmd := &cobra.Command{
-		Use:   "start AGENT PROVIDER_OR_PROFILE -- [native args]",
+		Use:   "start AGENT [PROVIDER_OR_PROFILE] -- [native args]",
 		Short: "Start an agent with a session-only provider/profile",
-		Args:  cobra.MinimumNArgs(2),
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			pb, err := getPB()
 			if err != nil {
@@ -399,8 +398,31 @@ func startCommand(getPB PBGetter) *cobra.Command {
 			if cwd == "" {
 				cwd, _ = os.Getwd()
 			}
+
+			agentSlug := args[0]
+			selector := ""
+			if len(args) > 1 {
+				selector = args[1]
+			}
+
+			// Check .aiswrc unless --ignore-project is set
+			if !ignoreProject && selector == "" {
+				if cfg, foundDir, err := projectconfig.Find(cwd); err == nil && cfg != nil {
+					if cfg.Profile != "" {
+						selector = cfg.Profile
+						fmt.Fprintf(cmd.OutOrStdout(), "using project profile %q from %s\n", cfg.Profile, foundDir)
+					} else if cfg.Provider != "" {
+						selector = cfg.Provider
+						fmt.Fprintf(cmd.OutOrStdout(), "using project provider %q from %s\n", cfg.Provider, foundDir)
+					}
+					if cfg.Agent != "" && cfg.Agent != agentSlug {
+						return fmt.Errorf(".aiswrc specifies agent %q but command asks for %q", cfg.Agent, agentSlug)
+					}
+				}
+			}
+
 			s := store.New(pb)
-			agent, provider, profile, err := s.ResolveSelector(args[0], args[1])
+			agent, provider, profile, err := s.ResolveSelector(agentSlug, selector)
 			if err != nil {
 				return err
 			}
@@ -426,6 +448,7 @@ func startCommand(getPB PBGetter) *cobra.Command {
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the launch plan without starting the agent")
 	cmd.Flags().StringVar(&terminal, "terminal", "current", "current|ghostty|terminal")
 	cmd.Flags().StringVar(&cwd, "cwd", "", "working directory")
+	cmd.Flags().BoolVar(&ignoreProject, "ignore-project", false, "ignore .aiswrc project config")
 	return cmd
 }
 
@@ -565,6 +588,47 @@ func configCommand(getPB PBGetter) *cobra.Command {
 	templateCmd.Flags().StringVar(&path, "path", "", "config template path")
 
 	cmd.AddCommand(exportCmd, importCmd, templateCmd)
+	return cmd
+}
+
+func initCommand(getPB PBGetter) *cobra.Command {
+	var profile string
+	var agent string
+	var provider string
+	var force bool
+	cmd := &cobra.Command{
+		Use:   "init",
+		Short: "Create a .aiswrc project config in the current directory",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			path := filepath.Join(cwd, ".aiswrc")
+			if _, err := os.Stat(path); err == nil && !force {
+				return fmt.Errorf("%s already exists; use --force to overwrite", path)
+			}
+
+			cfg := projectconfig.ProjectConfig{
+				Profile:  strings.TrimSpace(profile),
+				Agent:    strings.TrimSpace(agent),
+				Provider: strings.TrimSpace(provider),
+			}
+			if cfg.Profile == "" && cfg.Provider == "" {
+				return fmt.Errorf("at least one of --profile or --provider is required")
+			}
+			if err := projectconfig.Write(cwd, cfg); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "wrote %s\n", path)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&profile, "profile", "", "default profile slug for this directory")
+	cmd.Flags().StringVar(&agent, "agent", "", "agent slug (optional, for validation)")
+	cmd.Flags().StringVar(&provider, "provider", "", "provider slug (optional, for direct provider binding)")
+	cmd.Flags().BoolVar(&force, "force", false, "overwrite existing .aiswrc")
 	return cmd
 }
 

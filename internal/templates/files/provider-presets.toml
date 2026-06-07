@@ -1,22 +1,14 @@
 [[presets]]
-slug = "minimax"
-name = "MiniMax"
+slug = "deepseek"
+name = "DeepSeek"
 
   [[presets.url_options]]
-  slug = "openai"
+  slug = "deepseek"
   label = "OpenAI-compatible"
-  base_url = "https://api.minimax.chat/v1"
+  base_url = "https://api.deepseek.com/v1"
   api_protocol = "openai_chat"
-  default_model = "MiniMax-M1"
+  default_model = "deepseek-v4-flash"
   endpoints = { chat_completions = "/chat/completions", models = "/models" }
-
-  [[presets.url_options]]
-  slug = "claude"
-  label = "Claude Code-compatible"
-  base_url = "https://api.minimax.chat/anthropic"
-  api_protocol = "anthropic"
-  default_model = "claude-3-5-sonnet-20241022"
-  endpoints = { messages = "/v1/messages", models = "/v1/models" }
 
 [[presets]]
 slug = "kimi"
@@ -27,8 +19,36 @@ name = "Kimi / Moonshot"
   label = "OpenAI-compatible"
   base_url = "https://api.moonshot.cn/v1"
   api_protocol = "openai_chat"
-  default_model = "moonshot-v1-8k"
-  endpoints = { chat_completions = "/chat/completions", models = "/models" }
+  default_model = "kimi-latest"
+  endpoints = { chat_completions = "/chat_completions", models = "/models" }
+
+  [[presets.url_options]]
+  slug = "claude"
+  label = "Claude Code-compatible"
+  base_url = "https://api.moonshot.cn/anthropic"
+  api_protocol = "anthropic"
+  default_model = "kimi-latest"
+  endpoints = { messages = "/v1/messages", models = "/v1/models" }
+
+[[presets]]
+slug = "minimax"
+name = "MiniMax"
+
+  [[presets.url_options]]
+  slug = "openai"
+  label = "OpenAI-compatible"
+  base_url = "https://api.minimax.chat/v1"
+  api_protocol = "openai_chat"
+  default_model = "MiniMax-M3"
+  endpoints = { chat_completions = "/chat_completions", models = "/models" }
+
+  [[presets.url_options]]
+  slug = "claude"
+  label = "Claude Code-compatible"
+  base_url = "https://api.minimax.chat/anthropic"
+  api_protocol = "anthropic"
+  default_model = "MiniMax-M3"
+  endpoints = { messages = "/v1/messages", models = "/v1/models" }
 
 [[presets]]
 slug = "openai"
@@ -39,5 +59,17 @@ name = "OpenAI"
   label = "OpenAI-compatible"
   base_url = "https://api.openai.com/v1"
   api_protocol = "openai_chat"
-  default_model = "gpt-4o-mini"
-  endpoints = { chat_completions = "/chat/completions", responses = "/responses", models = "/models" }
+  default_model = "gpt-4o"
+  endpoints = { chat_completions = "/chat_completions", responses = "/responses", models = "/models" }
+
+[[presets]]
+slug = "xiaomi"
+name = "Xiaomi MiMo"
+
+  [[presets.url_options]]
+  slug = "openai"
+  label = "OpenAI-compatible"
+  base_url = "https://api.mimo.xiaomi.com/v1"
+  api_protocol = "openai_chat"
+  default_model = "mimo-7b"
+  endpoints = { chat_completions = "/chat_completions", models = "/models" }

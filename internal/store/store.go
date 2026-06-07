@@ -216,6 +216,30 @@ func (s *Store) GetProfile(slug string) (*Profile, error) {
 	return profile, nil
 }
 
+func (s *Store) GetDefaultProfile(agentSlug string) (*Profile, error) {
+	records, err := s.app.FindRecordsByFilter("profiles", "is_default=true", "slug", 0, 0)
+	if err != nil {
+		return nil, err
+	}
+	agents, err := s.idToAgentSlug()
+	if err != nil {
+		return nil, err
+	}
+	providers, err := s.idToProviderSlug()
+	if err != nil {
+		return nil, err
+	}
+	for _, record := range records {
+		profile := recordToProfile(record)
+		profile.AgentSlug = agents[profile.AgentID]
+		profile.ProviderSlug = providers[profile.ProviderID]
+		if profile.AgentSlug == agentSlug {
+			return profile, nil
+		}
+	}
+	return nil, nil
+}
+
 func (s *Store) ResolveSelector(agentSlug, selector string) (*Agent, *Provider, *Profile, error) {
 	agent, err := s.GetAgent(agentSlug)
 	if err != nil || agent == nil {
@@ -241,7 +265,20 @@ func (s *Store) ResolveSelector(agentSlug, selector string) (*Agent, *Provider, 
 		return agent, provider, nil, nil
 	}
 
-	return nil, nil, nil, fmt.Errorf("selector is required for now; add project/global bindings later")
+	// selector is empty: try default profile for this agent
+	profile, err := s.GetDefaultProfile(agentSlug)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to lookup default profile: %w", err)
+	}
+	if profile != nil {
+		provider, err := s.GetProvider(profile.ProviderSlug)
+		if err != nil || provider == nil {
+			return nil, nil, nil, fmt.Errorf("provider not found for default profile %s", profile.Slug)
+		}
+		return agent, provider, profile, nil
+	}
+
+	return nil, nil, nil, fmt.Errorf("no selector given and no default profile set for agent %s", agentSlug)
 }
 
 func (s *Store) SaveLaunchHistory(input LaunchHistory) error {

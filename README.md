@@ -40,10 +40,10 @@ go run ./cmd/aisw
 
 ```bash
 go run ./cmd/aisw provider add minimax \
-  --base-url https://api.example.com/v1 \
+  --base-url https://api.minimax.chat/v1 \
   --api-key-env MINIMAX_API_KEY \
   --protocol openai_chat \
-  --model gpt-test \
+  --model MiniMax-M3 \
   --endpoint chat_completions=/chat/completions \
   --endpoint models=/models
 ```
@@ -66,7 +66,7 @@ go run ./cmd/aisw config template --path ~/.innate-aiswitcher/config.toml
 go run ./cmd/aisw profile add codex-minimax \
   --agent codex \
   --provider minimax \
-  --model gpt-test
+  --model MiniMax-M3
 ```
 
 启动一个 session，启动前选择 Provider 或 Profile：

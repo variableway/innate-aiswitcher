@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/variableway/innate-aiswitcher/internal/adapter"
 	"github.com/variableway/innate-aiswitcher/internal/httpcheck"
 	"github.com/variableway/innate-aiswitcher/internal/store"
@@ -257,4 +258,122 @@ func providerSelectLabel(provider store.Provider) string {
 		model = "model=" + model
 	}
 	return fmt.Sprintf("%s | %s | %s | %s | %s | %s", provider.Slug, provider.Name, provider.APIProtocol, model, provider.BaseURL, keyState)
+}
+
+// PrintPresets renders provider presets with styled TUI output using lipgloss.
+func PrintPresets(presets []templates.ProviderPreset) {
+	// Styles
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#7CFC00")).
+		MarginBottom(1)
+
+	presetBoxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#3C3C3C")).
+		Padding(0, 1).
+		MarginBottom(1)
+
+	labelStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#87CEEB")).
+		Width(14)
+
+	valueStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#E0E0E0"))
+
+	slugStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#FFD700"))
+
+	optionTitleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#FF8C00")).
+		MarginTop(1)
+
+	endpointStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#98FB98"))
+
+	// Title
+	fmt.Println(titleStyle.Render("📦 Built-in Provider Presets"))
+	fmt.Println()
+
+	for _, preset := range presets {
+		var presetContent strings.Builder
+
+		// Preset header: slug + name
+		presetContent.WriteString(
+			lipgloss.JoinHorizontal(lipgloss.Top,
+				slugStyle.Render(preset.Slug),
+				lipgloss.NewStyle().Width(2).Render(" "),
+				valueStyle.Render(preset.Name),
+			),
+		)
+		presetContent.WriteString("\n")
+
+		// URL options
+		for i, option := range preset.URLOptions {
+			if len(preset.URLOptions) > 1 {
+				optionTitle := fmt.Sprintf("  option %d: %s", i+1, option.Label)
+				presetContent.WriteString(optionTitleStyle.Render(optionTitle))
+				presetContent.WriteString("\n")
+			}
+
+			provider := templates.ProviderFromPreset(preset, option, "")
+
+			// Protocol
+			presetContent.WriteString(
+				lipgloss.JoinHorizontal(lipgloss.Top,
+					labelStyle.Render("protocol"),
+					valueStyle.Render(provider.APIProtocol),
+				),
+			)
+			presetContent.WriteString("\n")
+
+			// Model
+			model := provider.DefaultModel
+			if model == "" {
+				model = "(none)"
+			}
+			presetContent.WriteString(
+				lipgloss.JoinHorizontal(lipgloss.Top,
+					labelStyle.Render("model"),
+					valueStyle.Render(model),
+				),
+			)
+			presetContent.WriteString("\n")
+
+			// Base URL
+			presetContent.WriteString(
+				lipgloss.JoinHorizontal(lipgloss.Top,
+					labelStyle.Render("base_url"),
+					valueStyle.Render(provider.BaseURL),
+				),
+			)
+			presetContent.WriteString("\n")
+
+			// Endpoints
+			if len(provider.Endpoints) > 0 {
+				var epParts []string
+				for k, v := range provider.Endpoints {
+					epParts = append(epParts, fmt.Sprintf("%s=%s", k, v))
+				}
+				presetContent.WriteString(
+					lipgloss.JoinHorizontal(lipgloss.Top,
+						labelStyle.Render("endpoints"),
+						endpointStyle.Render(strings.Join(epParts, ", ")),
+					),
+				)
+				presetContent.WriteString("\n")
+			}
+		}
+
+		fmt.Println(presetBoxStyle.Render(presetContent.String()))
+	}
+
+	// Footer hint
+	hintStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#808080")).
+		Italic(true)
+	fmt.Println(hintStyle.Render(fmt.Sprintf("Total: %d preset(s)", len(presets))))
 }
