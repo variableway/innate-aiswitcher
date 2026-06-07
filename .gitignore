@@ -1,7 +1,53 @@
+# macOS
 .DS_Store
 
 # Local build artifacts
 /bin/
+/dist/
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go workspace files
+go.work
+go.work.sum
+
+# Vendored dependencies
+vendor/
+
+# Test coverage
+coverage.out
+*.cover
+*.cov
 
 # Local PocketBase data if a developer runs with a repo-local data dir
 /pb_data/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Log files
+*.log
+
+# Temporary directories
+tmp/
+temp/
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.*.swp
+
+# Task / Build cache
+.task/
