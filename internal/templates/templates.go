@@ -1,3 +1,6 @@
+// Package templates loads embedded configuration templates and provider
+// presets bundled into the binary. It is used by the CLI and TUI to
+// generate example configs and guide provider setup.
 package templates
 
 import (

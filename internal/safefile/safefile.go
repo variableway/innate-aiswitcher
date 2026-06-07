@@ -1,3 +1,5 @@
+// Package safefile provides atomic file writes using temp-file + fsync + rename.
+// It is used for config exports and any operation where partial writes must be avoided.
 package safefile
 
 import (

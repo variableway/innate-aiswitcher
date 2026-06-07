@@ -1,3 +1,6 @@
+// Package configfile handles atomic export and import of the shared
+// config TOML mirror. Export writes providers/profiles from the store;
+// import reads a TOML file and upserts records inside a transaction.
 package configfile
 
 import (

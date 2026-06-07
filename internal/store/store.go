@@ -1,3 +1,6 @@
+// Package store wraps PocketBase collections into typed Go structs.
+// It provides CRUD for providers, agents, and profiles, plus transaction
+// support and selector resolution for agent session startup.
 package store
 
 import (

@@ -1,3 +1,6 @@
+// Package adapter provides launch plan builders for AI agents.
+// Each adapter translates a shared Provider into agent-specific temporary
+// configurations, environment variables, or settings files.
 package adapter
 
 import (

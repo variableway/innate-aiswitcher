@@ -1,3 +1,6 @@
+// Package httpcheck provides connectivity and model-listing checks
+// against LLM provider endpoints. It supports OpenAI-compatible,
+// OpenAI Responses, and Anthropic protocol request shapes.
 package httpcheck
 
 import (
