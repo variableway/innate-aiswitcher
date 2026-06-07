@@ -1,0 +1,43 @@
+[[presets]]
+slug = "minimax"
+name = "MiniMax"
+
+  [[presets.url_options]]
+  slug = "openai"
+  label = "OpenAI-compatible"
+  base_url = "https://api.minimax.chat/v1"
+  api_protocol = "openai_chat"
+  default_model = "MiniMax-M1"
+  endpoints = { chat_completions = "/chat/completions", models = "/models" }
+
+  [[presets.url_options]]
+  slug = "claude"
+  label = "Claude Code-compatible"
+  base_url = "https://api.minimax.chat/anthropic"
+  api_protocol = "anthropic"
+  default_model = "claude-3-5-sonnet-20241022"
+  endpoints = { messages = "/v1/messages", models = "/v1/models" }
+
+[[presets]]
+slug = "kimi"
+name = "Kimi / Moonshot"
+
+  [[presets.url_options]]
+  slug = "openai"
+  label = "OpenAI-compatible"
+  base_url = "https://api.moonshot.cn/v1"
+  api_protocol = "openai_chat"
+  default_model = "moonshot-v1-8k"
+  endpoints = { chat_completions = "/chat/completions", models = "/models" }
+
+[[presets]]
+slug = "openai"
+name = "OpenAI"
+
+  [[presets.url_options]]
+  slug = "openai"
+  label = "OpenAI-compatible"
+  base_url = "https://api.openai.com/v1"
+  api_protocol = "openai_chat"
+  default_model = "gpt-4o-mini"
+  endpoints = { chat_completions = "/chat/completions", responses = "/responses", models = "/models" }

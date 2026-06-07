@@ -1,0 +1,7 @@
+.DS_Store
+
+# Local build artifacts
+/bin/
+
+# Local PocketBase data if a developer runs with a repo-local data dir
+/pb_data/

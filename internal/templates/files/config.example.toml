@@ -1,0 +1,56 @@
+version = 1
+
+# Shared provider examples. Keep provider credentials here only when you are
+# comfortable storing them in the local config mirror; otherwise import with
+# empty api_key and fill it through the TUI/CLI.
+
+[[providers]]
+slug = "minimax-openai"
+name = "MiniMax OpenAI Compatible"
+base_url = "https://api.minimax.chat/v1"
+api_protocol = "openai_chat"
+default_model = "MiniMax-M1"
+endpoints = { chat_completions = "/chat/completions", models = "/models" }
+active = true
+
+[[providers]]
+slug = "minimax-claude"
+name = "MiniMax Claude Code Compatible"
+base_url = "https://api.minimax.chat/anthropic"
+api_protocol = "anthropic"
+default_model = "claude-3-5-sonnet-20241022"
+endpoints = { messages = "/v1/messages", models = "/v1/models" }
+active = true
+
+[[providers]]
+slug = "kimi-openai"
+name = "Kimi OpenAI Compatible"
+base_url = "https://api.moonshot.cn/v1"
+api_protocol = "openai_chat"
+default_model = "moonshot-v1-8k"
+endpoints = { chat_completions = "/chat/completions", models = "/models" }
+active = true
+
+[[profiles]]
+slug = "codex-minimax"
+name = "Codex with MiniMax"
+agent = "codex"
+provider = "minimax-openai"
+model = "MiniMax-M1"
+is_default = false
+
+[[profiles]]
+slug = "claude-minimax"
+name = "Claude Code with MiniMax"
+agent = "claude"
+provider = "minimax-claude"
+model = "claude-3-5-sonnet-20241022"
+is_default = false
+
+[[profiles]]
+slug = "kimi-openai"
+name = "Kimi CLI with Moonshot"
+agent = "kimi"
+provider = "kimi-openai"
+model = "moonshot-v1-8k"
+is_default = false
