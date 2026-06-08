@@ -29,6 +29,13 @@ coverage.out
 # Local PocketBase data if a developer runs with a repo-local data dir
 /pb_data/
 
+# SQLite databases
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+
 # Environment files
 .env
 .env.local
