@@ -159,16 +159,29 @@ func configureProvider(s *store.Store) error {
 	}
 
 	provider := templates.ProviderFromPreset(preset, option, "")
+
+	// Check if provider already exists in DB — prefill saved values
+	existing, _ := s.GetProvider(provider.Slug)
 	apiKey := ""
 	baseURL := provider.BaseURL
 	model := provider.DefaultModel
 	slug := provider.Slug
 	name := provider.Name
+	keyDescription := "Leave empty to keep an existing saved key."
+
+	if existing != nil {
+		baseURL = existing.BaseURL
+		model = existing.DefaultModel
+		name = existing.Name
+		if existing.APIKey != "" {
+			keyDescription = "Key already saved. Leave empty to keep it, or enter a new one."
+		}
+	}
 
 	if err := huh.NewForm(huh.NewGroup(
 		huh.NewInput().Title("Provider slug").Value(&slug),
 		huh.NewInput().Title("Display name").Value(&name),
-		huh.NewInput().Title("API key").Description("Leave empty to keep an existing saved key.").EchoMode(huh.EchoModePassword).Value(&apiKey),
+		huh.NewInput().Title("API key").Description(keyDescription).EchoMode(huh.EchoModePassword).Value(&apiKey),
 		huh.NewInput().Title("Base URL").Value(&baseURL),
 		huh.NewInput().Title("Default model").Value(&model),
 	)).Run(); err != nil {
