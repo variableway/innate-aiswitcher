@@ -18,13 +18,15 @@ type Provider struct {
 }
 
 type Agent struct {
-	ID      string            `json:"id" toml:"-"`
-	Slug    string            `json:"slug" toml:"slug"`
-	Name    string            `json:"name" toml:"name"`
-	Binary  string            `json:"binary" toml:"binary"`
-	Adapter string            `json:"adapter" toml:"adapter"`
-	EnvMap  map[string]string `json:"env_map,omitempty" toml:"env_map,omitempty"`
-	Active  bool              `json:"active" toml:"active"`
+	ID                     string            `json:"id" toml:"-"`
+	Slug                   string            `json:"slug" toml:"slug"`
+	Name                   string            `json:"name" toml:"name"`
+	Binary                 string            `json:"binary" toml:"binary"`
+	Adapter                string            `json:"adapter" toml:"adapter"`
+	EnvMap                 map[string]string `json:"env_map,omitempty" toml:"env_map,omitempty"`
+	Active                 bool              `json:"active" toml:"active"`
+	SkipPermissionsArg     string            `json:"skip_permissions_arg,omitempty" toml:"skip_permissions_arg,omitempty"`
+	SkipPermissionsDefault bool              `json:"skip_permissions_default" toml:"skip_permissions_default"`
 }
 
 type Profile struct {
@@ -39,6 +41,7 @@ type Profile struct {
 	ConfigOverrides map[string]interface{} `json:"config_overrides,omitempty" toml:"config_overrides,omitempty"`
 	EnvOverrides    map[string]string      `json:"env_overrides,omitempty" toml:"env_overrides,omitempty"`
 	DefaultArgs     string                 `json:"default_args,omitempty" toml:"default_args,omitempty"`
+	SkipPermissions string                 `json:"skip_permissions,omitempty" toml:"skip_permissions,omitempty"`
 	IsDefault       bool                   `json:"is_default" toml:"is_default"`
 }
 

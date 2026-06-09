@@ -64,6 +64,7 @@ func BuilderNames() []string {
 
 func BuildPlan(agent store.Agent, provider store.Provider, profile *store.Profile, opts LaunchOptions) (LaunchPlan, func(), error) {
 	args := append(defaultArgs(profile), opts.Args...)
+	args = applySkipPermissions(agent, profile, args)
 	model := provider.DefaultModel
 	if profile != nil && profile.Model != "" {
 		model = profile.Model
@@ -242,6 +243,31 @@ func defaultArgs(profile *store.Profile) []string {
 		return nil
 	}
 	return strings.Fields(profile.DefaultArgs)
+}
+
+// applySkipPermissions appends the agent's skip-permissions flag to args
+// when the effective setting is on. Effective setting resolves as:
+//   - profile.SkipPermissions "true"/"false" → force on/off
+//   - profile.SkipPermissions ""             → fall back to agent.SkipPermissionsDefault
+//   - no agent.SkipPermissionsArg            → no flag known, nothing to do
+func applySkipPermissions(agent store.Agent, profile *store.Profile, args []string) []string {
+	flag := strings.TrimSpace(agent.SkipPermissionsArg)
+	if flag == "" {
+		return args
+	}
+	enabled := agent.SkipPermissionsDefault
+	if profile != nil {
+		switch strings.ToLower(strings.TrimSpace(profile.SkipPermissions)) {
+		case "true", "yes", "1", "on":
+			enabled = true
+		case "false", "no", "0", "off":
+			enabled = false
+		}
+	}
+	if !enabled {
+		return args
+	}
+	return append(args, flag)
 }
 
 func envOverrides(profile *store.Profile) map[string]string {

@@ -226,6 +226,7 @@ func (s *Store) UpsertProfile(input Profile) (*Profile, error) {
 	record.Set("config_overrides", nonNilInterfaceMap(input.ConfigOverrides))
 	record.Set("env_overrides", nonNilMap(input.EnvOverrides))
 	record.Set("default_args", input.DefaultArgs)
+	record.Set("skip_permissions", input.SkipPermissions)
 	record.Set("is_default", input.IsDefault)
 
 	if err := s.app.Save(record); err != nil {
@@ -259,6 +260,14 @@ func (s *Store) ListProfiles() ([]Profile, error) {
 		profiles = append(profiles, *profile)
 	}
 	return profiles, nil
+}
+
+func (s *Store) DeleteProfile(slug string) error {
+	record, err := s.findRecordBySlug("profiles", slug)
+	if err != nil || record == nil {
+		return err
+	}
+	return s.app.Delete(record)
 }
 
 func (s *Store) GetProfile(slug string) (*Profile, error) {
@@ -420,13 +429,15 @@ func recordToProvider(record *core.Record) *Provider {
 
 func recordToAgent(record *core.Record) *Agent {
 	return &Agent{
-		ID:      record.Id,
-		Slug:    record.GetString("slug"),
-		Name:    record.GetString("name"),
-		Binary:  record.GetString("binary"),
-		Adapter: record.GetString("adapter"),
-		EnvMap:  decodeJSONMap[map[string]string](record.Get("env_map")),
-		Active:  record.GetBool("active"),
+		ID:                     record.Id,
+		Slug:                   record.GetString("slug"),
+		Name:                   record.GetString("name"),
+		Binary:                 record.GetString("binary"),
+		Adapter:                record.GetString("adapter"),
+		EnvMap:                 decodeJSONMap[map[string]string](record.Get("env_map")),
+		Active:                 record.GetBool("active"),
+		SkipPermissionsArg:     record.GetString("skip_permissions_arg"),
+		SkipPermissionsDefault: record.GetBool("skip_permissions_default"),
 	}
 }
 
@@ -441,6 +452,7 @@ func recordToProfile(record *core.Record) *Profile {
 		ConfigOverrides: decodeJSONMap[map[string]interface{}](record.Get("config_overrides")),
 		EnvOverrides:    decodeJSONMap[map[string]string](record.Get("env_overrides")),
 		DefaultArgs:     record.GetString("default_args"),
+		SkipPermissions: record.GetString("skip_permissions"),
 		IsDefault:       record.GetBool("is_default"),
 	}
 }

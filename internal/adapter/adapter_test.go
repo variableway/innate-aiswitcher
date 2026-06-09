@@ -358,3 +358,127 @@ func TestWithEnvPrefix(t *testing.T) {
 		t.Fatalf("expected command suffix, got %s", got)
 	}
 }
+
+func TestApplySkipPermissions(t *testing.T) {
+	cases := []struct {
+		name     string
+		agent    store.Agent
+		profile  *store.Profile
+		input    []string
+		expected []string
+	}{
+		{
+			name:     "no flag configured → unchanged",
+			agent:    store.Agent{Binary: "claude", Adapter: "claude"},
+			input:    []string{"--debug"},
+			expected: []string{"--debug"},
+		},
+		{
+			name:     "claude default-on, no override → flag appended",
+			agent:    store.Agent{Binary: "claude", Adapter: "claude", SkipPermissionsArg: "--dangerously-skip-permissions", SkipPermissionsDefault: true},
+			input:    []string{"--debug"},
+			expected: []string{"--debug", "--dangerously-skip-permissions"},
+		},
+		{
+			name:     "kimi default-on → flag appended",
+			agent:    store.Agent{Binary: "kimi", Adapter: "openai_env", SkipPermissionsArg: "--yolo", SkipPermissionsDefault: true},
+			input:    nil,
+			expected: []string{"--yolo"},
+		},
+		{
+			name:     "default-off, no override → unchanged",
+			agent:    store.Agent{Binary: "codex", Adapter: "codex", SkipPermissionsArg: "--full-auto", SkipPermissionsDefault: false},
+			input:    nil,
+			expected: nil,
+		},
+		{
+			name:     "profile override forces on",
+			agent:    store.Agent{Binary: "codex", Adapter: "codex", SkipPermissionsArg: "--full-auto", SkipPermissionsDefault: false},
+			profile:  &store.Profile{SkipPermissions: "true"},
+			input:    nil,
+			expected: []string{"--full-auto"},
+		},
+		{
+			name:     "profile override forces off",
+			agent:    store.Agent{Binary: "claude", Adapter: "claude", SkipPermissionsArg: "--dangerously-skip-permissions", SkipPermissionsDefault: true},
+			profile:  &store.Profile{SkipPermissions: "false"},
+			input:    []string{"--debug"},
+			expected: []string{"--debug"},
+		},
+		{
+			name:     "profile override on/off spellings",
+			agent:    store.Agent{Binary: "claude", Adapter: "claude", SkipPermissionsArg: "--dangerously-skip-permissions", SkipPermissionsDefault: false},
+			profile:  &store.Profile{SkipPermissions: "yes"},
+			input:    nil,
+			expected: []string{"--dangerously-skip-permissions"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := applySkipPermissions(tc.agent, tc.profile, append([]string{}, tc.input...))
+			if len(got) != len(tc.expected) {
+				t.Fatalf("len mismatch: got %v want %v", got, tc.expected)
+			}
+			for i := range got {
+				if got[i] != tc.expected[i] {
+					t.Fatalf("idx %d: got %q want %q (full: %v vs %v)", i, got[i], tc.expected[i], got, tc.expected)
+				}
+			}
+		})
+	}
+}
+
+func TestBuildPlanAppendsSkipPermissionsForKnownAgents(t *testing.T) {
+	provider := store.Provider{
+		Slug: "shared", BaseURL: "https://example.test/v1", APIKey: "sk",
+		APIProtocol: "openai_chat", DefaultModel: "m",
+	}
+
+	claudeAgent := store.Agent{Binary: "claude", Adapter: "claude", SkipPermissionsArg: "--dangerously-skip-permissions", SkipPermissionsDefault: true}
+	plan, cleanup, err := BuildPlan(claudeAgent, provider, nil, LaunchOptions{CWD: "/tmp"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if !strings.Contains(plan.Command, "--dangerously-skip-permissions") {
+		t.Fatalf("claude plan should include skip-permissions flag, got: %s", plan.Command)
+	}
+
+	kimiAgent := store.Agent{Binary: "kimi", Adapter: "openai_env", SkipPermissionsArg: "--yolo", SkipPermissionsDefault: true}
+	plan2, cleanup2, err := BuildPlan(kimiAgent, provider, nil, LaunchOptions{CWD: "/tmp"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup2()
+	if !strings.Contains(plan2.Command, "--yolo") {
+		t.Fatalf("kimi plan should include --yolo flag, got: %s", plan2.Command)
+	}
+
+	plainAgent := store.Agent{Binary: "codex", Adapter: "codex"} // no skip flag configured
+	plan3, cleanup3, err := BuildPlan(plainAgent, provider, nil, LaunchOptions{CWD: "/tmp"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup3()
+	if strings.Contains(plan3.Command, "--dangerously-skip-permissions") || strings.Contains(plan3.Command, "--yolo") {
+		t.Fatalf("agent without SkipPermissionsArg should not get any skip flag, got: %s", plan3.Command)
+	}
+}
+
+func TestBuildPlanProfileOverrideDisablesSkipPermissions(t *testing.T) {
+	provider := store.Provider{
+		Slug: "shared", BaseURL: "https://example.test/v1", APIKey: "sk",
+		APIProtocol: "openai_chat", DefaultModel: "m",
+	}
+	claudeAgent := store.Agent{Binary: "claude", Adapter: "claude", SkipPermissionsArg: "--dangerously-skip-permissions", SkipPermissionsDefault: true}
+	profile := &store.Profile{SkipPermissions: "false"}
+
+	plan, cleanup, err := BuildPlan(claudeAgent, provider, profile, LaunchOptions{CWD: "/tmp"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if strings.Contains(plan.Command, "--dangerously-skip-permissions") {
+		t.Fatalf("profile.skip_permissions=false should suppress the flag, got: %s", plan.Command)
+	}
+}

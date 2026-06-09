@@ -367,6 +367,7 @@ func profileCommand(getPB PBGetter) *cobra.Command {
 	addCmd.Flags().StringVar(&profile.ProviderSlug, "provider", "", "provider slug")
 	addCmd.Flags().StringVar(&profile.Model, "model", "", "model override")
 	addCmd.Flags().StringVar(&profile.DefaultArgs, "args", "", "default native args")
+	addCmd.Flags().StringVar(&profile.SkipPermissions, "skip-permissions", "", "override agent's skip-permissions default: true | false (empty = use agent default)")
 	addCmd.Flags().BoolVar(&profile.IsDefault, "default", false, "mark as default")
 	_ = addCmd.MarkFlagRequired("agent")
 	_ = addCmd.MarkFlagRequired("provider")
@@ -528,15 +529,26 @@ func testCommand(getPB PBGetter) *cobra.Command {
 }
 
 func configCommand(getPB PBGetter) *cobra.Command {
-	cmd := &cobra.Command{Use: "config", Short: "Import/export the shared config.toml mirror"}
+	cmd := &cobra.Command{Use: "config", Short: "Import/export the shared config mirror (TOML or JSON)"}
 	var path string
 	var includeSecrets bool
 	var backup bool
 	var noBackup bool
 	var backupPath string
+	var format string
+	parseFormat := func(defaultFmt configfile.Format) (configfile.Format, error) {
+		f := configfile.Format(format)
+		if f == "" {
+			return defaultFmt, nil
+		}
+		if !f.Valid() {
+			return "", fmt.Errorf("unsupported --format %q (expected toml or json)", format)
+		}
+		return f, nil
+	}
 	exportCmd := &cobra.Command{
 		Use:   "export",
-		Short: "Export SQLite data to config.toml",
+		Short: "Export SQLite data to a TOML or JSON config file",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			pb, err := getPB()
@@ -546,15 +558,20 @@ func configCommand(getPB PBGetter) *cobra.Command {
 			if path == "" {
 				path = configfile.DefaultPath()
 			}
-			if err := configfile.Export(store.New(pb), path, includeSecrets); err != nil {
+			f, err := parseFormat(configfile.FormatTOML)
+			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "exported %s\n", path)
+			if err := configfile.Export(store.New(pb), path, f, includeSecrets); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "exported %s (%s)\n", path, f)
 			return nil
 		},
 	}
 	exportCmd.Flags().StringVar(&path, "path", "", "config path")
 	exportCmd.Flags().BoolVar(&includeSecrets, "include-secrets", false, "include API keys in the exported file")
+	exportCmd.Flags().StringVar(&format, "format", "", "wire format: toml (default) or json")
 
 	dumpCmd := &cobra.Command{
 		Use:   "dump",
@@ -568,18 +585,23 @@ func configCommand(getPB PBGetter) *cobra.Command {
 			if path == "" {
 				path = configfile.InitConfigPath()
 			}
-			if err := configfile.Dump(store.New(pb), path); err != nil {
+			f, err := parseFormat(configfile.FormatTOML)
+			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "dumped %s\n", path)
+			if err := configfile.DumpWithFormat(store.New(pb), path, f); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "dumped %s (%s)\n", path, f)
 			return nil
 		},
 	}
 	dumpCmd.Flags().StringVar(&path, "path", "", "dump path")
+	dumpCmd.Flags().StringVar(&format, "format", "", "wire format: toml (default) or json")
 
 	importCmd := &cobra.Command{
 		Use:   "import",
-		Short: "Backup current SQLite config and import config.toml",
+		Short: "Backup current SQLite config and import a TOML or JSON config file",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			pb, err := getPB()
@@ -589,6 +611,10 @@ func configCommand(getPB PBGetter) *cobra.Command {
 			if path == "" {
 				path = configfile.DefaultPath()
 			}
+			f, err := parseFormat("")
+			if err != nil {
+				return err
+			}
 			s := store.New(pb)
 			if backup && !noBackup {
 				actualBackupPath, err := configfile.Backup(s, backupPath)
@@ -597,7 +623,7 @@ func configCommand(getPB PBGetter) *cobra.Command {
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "backup %s\n", actualBackupPath)
 			}
-			if err := configfile.Import(s, path); err != nil {
+			if err := configfile.Import(s, path, f); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "imported %s\n", path)
@@ -608,6 +634,7 @@ func configCommand(getPB PBGetter) *cobra.Command {
 	importCmd.Flags().BoolVar(&backup, "backup", true, "export a backup before importing")
 	importCmd.Flags().BoolVar(&noBackup, "no-backup", false, "skip backup before importing")
 	importCmd.Flags().StringVar(&backupPath, "backup-path", "", "backup path")
+	importCmd.Flags().StringVar(&format, "format", "", "wire format: toml, json, or auto-detect (default)")
 
 	templateCmd := &cobra.Command{
 		Use:   "template",
@@ -776,7 +803,7 @@ func maybeInitConfig(pb *pocketbase.PocketBase, initConfigPath string) error {
 		return nil
 	}
 
-	if err := configfile.Import(s, path); err != nil {
+	if err := configfile.Import(s, path, ""); err != nil {
 		return fmt.Errorf("init-config import failed: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "initialized from %s\n", path)
