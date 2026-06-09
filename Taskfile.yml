@@ -40,6 +40,14 @@ tasks:
       - mkdir -p {{.BIN_DIR}}
       - go build -o {{.BIN_DIR}}/{{.BINARY}} {{.CLI_PKG}}
 
+  install:
+    desc: Build and install aisw to ~/.local/bin
+    deps:
+      - build
+    cmds:
+      - mkdir -p ~/.local/bin
+      - cp {{.BIN_DIR}}/{{.BINARY}} ~/.local/bin/{{.BINARY}}
+
   compile:
     desc: Compile all current MVP packages
     cmds:

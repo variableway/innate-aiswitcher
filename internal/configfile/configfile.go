@@ -29,6 +29,14 @@ func DefaultPath() string {
 	return filepath.Join(home, ".innate-aiswitcher", "config.toml")
 }
 
+func InitConfigPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return "init-config.toml"
+	}
+	return filepath.Join(home, ".innate-aiswitcher", "init-config.toml")
+}
+
 func DefaultBackupPath() string {
 	base := filepath.Join(".", "backups")
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
@@ -43,6 +51,10 @@ func Backup(s *store.Store, path string) (string, error) {
 		path = DefaultBackupPath()
 	}
 	return path, Export(s, path, true)
+}
+
+func Dump(s *store.Store, path string) error {
+	return Export(s, path, true)
 }
 
 func Export(s *store.Store, path string, includeSecrets bool) error {

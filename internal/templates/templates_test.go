@@ -11,8 +11,8 @@ func TestProviderPresetsIncludeMinimaxURLChoices(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(preset.URLOptions) != 2 {
-		t.Fatalf("expected minimax to have 2 URL options, got %d", len(preset.URLOptions))
+	if len(preset.URLOptions) != 3 {
+		t.Fatalf("expected minimax to have 3 URL options, got %d", len(preset.URLOptions))
 	}
 
 	protocols := map[string]string{}
@@ -23,13 +23,13 @@ func TestProviderPresetsIncludeMinimaxURLChoices(t *testing.T) {
 		models[option.Slug] = option.DefaultModel
 		endpoints[option.Slug] = option.Endpoints
 	}
-	if protocols["openai"] != "openai_chat" || protocols["claude"] != "anthropic" {
+	if protocols["openai"] != "openai_chat" || protocols["claude"] != "anthropic" || protocols["codex"] != "openai_responses" {
 		t.Fatalf("unexpected protocols: %+v", protocols)
 	}
-	if models["openai"] == "" || models["claude"] == "" {
+	if models["openai"] == "" || models["claude"] == "" || models["codex"] == "" {
 		t.Fatalf("preset options must define default models: %+v", models)
 	}
-	if endpoints["openai"]["chat_completions"] == "" || endpoints["claude"]["messages"] == "" {
+	if endpoints["openai"]["chat_completions"] == "" || endpoints["claude"]["messages"] == "" || endpoints["codex"]["responses"] == "" {
 		t.Fatalf("preset options must define protocol endpoints: %+v", endpoints)
 	}
 }

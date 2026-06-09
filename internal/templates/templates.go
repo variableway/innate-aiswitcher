@@ -27,12 +27,13 @@ type ProviderPreset struct {
 }
 
 type URLOption struct {
-	Slug         string            `toml:"slug"`
-	Label        string            `toml:"label"`
-	BaseURL      string            `toml:"base_url"`
-	APIProtocol  string            `toml:"api_protocol"`
-	DefaultModel string            `toml:"default_model"`
-	Endpoints    map[string]string `toml:"endpoints"`
+	Slug         string                 `toml:"slug"`
+	Label        string                 `toml:"label"`
+	BaseURL      string                 `toml:"base_url"`
+	APIProtocol  string                 `toml:"api_protocol"`
+	DefaultModel string                 `toml:"default_model"`
+	Endpoints    map[string]string      `toml:"endpoints"`
+	Capabilities map[string]interface{} `toml:"capabilities"`
 }
 
 type presetFile struct {
@@ -99,6 +100,7 @@ func ProviderFromPreset(preset ProviderPreset, option URLOption, apiKey string) 
 		APIProtocol:  option.APIProtocol,
 		DefaultModel: option.DefaultModel,
 		Endpoints:    option.Endpoints,
+		Capabilities: option.Capabilities,
 		Active:       true,
 	}
 }

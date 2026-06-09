@@ -34,6 +34,7 @@ type Options struct {
 	DataDir         string
 	EnableAdminUI   bool
 	ShowAdminBanner bool
+	InitConfig      string
 }
 
 type PBGetter func() (*pocketbase.PocketBase, error)
@@ -47,6 +48,9 @@ func NewCLI() *cobra.Command {
 		}
 		pb = NewWithOptions(opts)
 		if err := pb.Bootstrap(); err != nil {
+			return nil, err
+		}
+		if err := maybeInitConfig(pb, opts.InitConfig); err != nil {
 			return nil, err
 		}
 		return pb, nil
@@ -67,6 +71,7 @@ func NewCLI() *cobra.Command {
 	cmd.PersistentFlags().StringVar(&opts.DataDir, "dir", opts.DataDir, "the PocketBase data directory")
 	cmd.PersistentFlags().BoolVar(&opts.EnableAdminUI, "admin-ui", false, "enable the PocketBase admin UI at /_")
 	cmd.PersistentFlags().BoolVar(&opts.ShowAdminBanner, "show-admin-banner", false, "show the PocketBase startup banner and admin install URL")
+	cmd.PersistentFlags().StringVar(&opts.InitConfig, "init-config", "", "import config from a TOML file when the database is empty (defaults to "+configfile.InitConfigPath()+")")
 	cmd.AddCommand(
 		providerCommand(getPB),
 		profileCommand(getPB),
@@ -340,6 +345,19 @@ func profileCommand(getPB PBGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if profile.IsDefault {
+				agent, err := store.New(pb).GetAgent(profile.AgentSlug)
+				if err != nil || agent == nil {
+					return fmt.Errorf("agent not found: %s", profile.AgentSlug)
+				}
+				provider, err := store.New(pb).GetProvider(profile.ProviderSlug)
+				if err != nil || provider == nil {
+					return fmt.Errorf("provider not found: %s", profile.ProviderSlug)
+				}
+				if err := adapter.PersistDefault(*agent, *provider, result); err != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to persist default config for %s: %v\n", agent.Name, err)
+				}
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "saved profile %s (%s -> %s)\n", result.Slug, result.AgentSlug, result.ProviderSlug)
 			return nil
 		},
@@ -538,6 +556,27 @@ func configCommand(getPB PBGetter) *cobra.Command {
 	exportCmd.Flags().StringVar(&path, "path", "", "config path")
 	exportCmd.Flags().BoolVar(&includeSecrets, "include-secrets", false, "include API keys in the exported file")
 
+	dumpCmd := &cobra.Command{
+		Use:   "dump",
+		Short: "Export full config (with secrets) to the init-config file",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			pb, err := getPB()
+			if err != nil {
+				return err
+			}
+			if path == "" {
+				path = configfile.InitConfigPath()
+			}
+			if err := configfile.Dump(store.New(pb), path); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "dumped %s\n", path)
+			return nil
+		},
+	}
+	dumpCmd.Flags().StringVar(&path, "path", "", "dump path")
+
 	importCmd := &cobra.Command{
 		Use:   "import",
 		Short: "Backup current SQLite config and import config.toml",
@@ -587,7 +626,7 @@ func configCommand(getPB PBGetter) *cobra.Command {
 	}
 	templateCmd.Flags().StringVar(&path, "path", "", "config template path")
 
-	cmd.AddCommand(exportCmd, importCmd, templateCmd)
+	cmd.AddCommand(exportCmd, dumpCmd, importCmd, templateCmd)
 	return cmd
 }
 
@@ -710,6 +749,38 @@ func printPlan(cmd *cobra.Command, plan adapter.LaunchPlan) {
 	if bytes, err := json.MarshalIndent(plan, "", "  "); err == nil {
 		fmt.Fprintln(cmd.OutOrStdout(), string(bytes))
 	}
+}
+
+func maybeInitConfig(pb *pocketbase.PocketBase, initConfigPath string) error {
+	s := store.New(pb)
+	providers, err := s.ListProviders()
+	if err != nil {
+		return err
+	}
+	profiles, err := s.ListProfiles()
+	if err != nil {
+		return err
+	}
+	if len(providers) > 0 || len(profiles) > 0 {
+		return nil
+	}
+
+	path := initConfigPath
+	if path == "" {
+		path = configfile.InitConfigPath()
+	}
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		if initConfigPath != "" {
+			return fmt.Errorf("init-config file not found: %s", path)
+		}
+		return nil
+	}
+
+	if err := configfile.Import(s, path); err != nil {
+		return fmt.Errorf("init-config import failed: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "initialized from %s\n", path)
+	return nil
 }
 
 func errString(err error) string {

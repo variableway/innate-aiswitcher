@@ -69,7 +69,67 @@ func (s *Store) UpsertProvider(input Provider) (*Provider, error) {
 	if err := s.app.Save(record); err != nil {
 		return nil, err
 	}
+	if err := s.syncProviderAPIKey(record); err != nil {
+		return nil, err
+	}
 	return recordToProvider(record), nil
+}
+
+func (s *Store) syncProviderAPIKey(record *core.Record) error {
+	slug := record.GetString("slug")
+	apiKey := record.GetString("api_key")
+
+	mainSlug := slug
+	if idx := strings.Index(slug, "-"); idx > 0 {
+		mainSlug = slug[:idx]
+	}
+
+	if apiKey == "" {
+		allRecords, err := s.app.FindRecordsByFilter("providers", "", "slug", 0, 0)
+		if err != nil {
+			return err
+		}
+		for _, other := range allRecords {
+			if other.Id == record.Id {
+				continue
+			}
+			otherSlug := other.GetString("slug")
+			otherMain := otherSlug
+			if idx := strings.Index(otherSlug, "-"); idx > 0 {
+				otherMain = otherSlug[:idx]
+			}
+			if otherMain == mainSlug {
+				otherKey := other.GetString("api_key")
+				if otherKey != "" {
+					record.Set("api_key", otherKey)
+					return s.app.Save(record)
+				}
+			}
+		}
+		return nil
+	}
+
+	allRecords, err := s.app.FindRecordsByFilter("providers", "", "slug", 0, 0)
+	if err != nil {
+		return err
+	}
+	for _, other := range allRecords {
+		if other.Id == record.Id {
+			continue
+		}
+		otherSlug := other.GetString("slug")
+		otherMain := otherSlug
+		if idx := strings.Index(otherSlug, "-"); idx > 0 {
+			otherMain = otherSlug[:idx]
+		}
+		if otherMain == mainSlug && other.GetString("api_key") != apiKey {
+			other.Set("api_key", apiKey)
+			if err := s.app.Save(other); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Store) ListProviders() ([]Provider, error) {

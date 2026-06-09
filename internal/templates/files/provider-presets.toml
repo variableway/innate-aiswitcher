@@ -37,18 +37,28 @@ name = "MiniMax"
   [[presets.url_options]]
   slug = "openai"
   label = "OpenAI-compatible"
-  base_url = "https://api.minimax.chat/v1"
+  base_url = "https://api.minimaxi.com/v1"
   api_protocol = "openai_chat"
   default_model = "MiniMax-M3"
-  endpoints = { chat_completions = "/chat_completions", models = "/models" }
+  endpoints = { chat_completions = "/chat/completions", models = "/models" }
 
   [[presets.url_options]]
   slug = "claude"
   label = "Claude Code-compatible"
-  base_url = "https://api.minimax.chat/anthropic"
+  base_url = "https://api.minimaxi.com/anthropic"
   api_protocol = "anthropic"
   default_model = "MiniMax-M3"
   endpoints = { messages = "/v1/messages", models = "/v1/models" }
+  capabilities = { claude_extra_env = { API_TIMEOUT_MS = "3000000", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1", CLAUDE_CODE_AUTO_COMPACT_WINDOW = "512000" } }
+
+  [[presets.url_options]]
+  slug = "codex"
+  label = "Codex-compatible"
+  base_url = "https://api.minimaxi.com/v1"
+  api_protocol = "openai_responses"
+  default_model = "MiniMax-M3"
+  endpoints = { responses = "/responses", models = "/models" }
+  capabilities = { codex_auth_mode = "experimental_bearer_token", codex_model_context_window = 512000 }
 
 [[presets]]
 slug = "openai"
@@ -81,6 +91,16 @@ name = "Xiaomi MiMo (Coding Plan)"
   api_protocol = "anthropic"
   default_model = "mimo-v2.5-pro"
   endpoints = { messages = "/v1/messages", models = "/v1/models" }
+  capabilities = { claude_extra_env = { API_TIMEOUT_MS = "3000000", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1", CLAUDE_CODE_AUTO_COMPACT_WINDOW = "512000" } }
+
+  [[presets.url_options]]
+  slug = "codex"
+  label = "Codex-compatible"
+  base_url = "https://token-plan-cn.xiaomimimo.com/v1"
+  api_protocol = "openai_responses"
+  default_model = "mimo-v2.5-pro"
+  endpoints = { responses = "/responses", models = "/models" }
+  capabilities = { codex_auth_mode = "experimental_bearer_token", codex_model_context_window = 512000 }
 
 [[presets]]
 slug = "anthropic"
