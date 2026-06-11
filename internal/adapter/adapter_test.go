@@ -465,6 +465,90 @@ func TestBuildPlanAppendsSkipPermissionsForKnownAgents(t *testing.T) {
 	}
 }
 
+func TestBuildClaudePlanWritesSkipDangerousModePermissionPrompt(t *testing.T) {
+	provider := store.Provider{
+		Slug: "anthropic", BaseURL: "https://api.anthropic.com", APIKey: "key",
+		APIProtocol: "anthropic", DefaultModel: "claude-sonnet-4-20250514",
+	}
+
+	// Always true regardless of agent/profile settings — it's a UI prompt, not a permission gate
+	cases := []struct {
+		name   string
+		agent  store.Agent
+		profile *store.Profile
+	}{
+		{"default agent, no profile", store.Agent{Binary: "claude", Adapter: "claude", SkipPermissionsDefault: true}, nil},
+		{"profile override false", store.Agent{Binary: "claude", Adapter: "claude", SkipPermissionsDefault: true}, &store.Profile{SkipPermissions: "false"}},
+		{"agent default-off", store.Agent{Binary: "claude", Adapter: "claude", SkipPermissionsDefault: false}, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			plan, cleanup, err := BuildPlan(tc.agent, provider, tc.profile, LaunchOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer cleanup()
+			bytes, _ := os.ReadFile(plan.Files["settings"])
+			var settings map[string]any
+			if err := json.Unmarshal(bytes, &settings); err != nil {
+				t.Fatal(err)
+			}
+			if settings["skipDangerousModePermissionPrompt"] != true {
+				t.Fatalf("expected skipDangerousModePermissionPrompt=true, got %v", settings["skipDangerousModePermissionPrompt"])
+			}
+		})
+	}
+}
+
+func TestBuildClaudePlanFullCommandWithSkipPermissions(t *testing.T) {
+	provider := store.Provider{
+		Slug: "anthropic", BaseURL: "https://api.anthropic.com", APIKey: "sk-ant-test",
+		APIProtocol: "anthropic", DefaultModel: "claude-sonnet-4-20250514",
+	}
+	// Simulates the real agent seed: SkipPermissionsArg="--dangerously-skip-permissions", Default=true
+	agent := store.Agent{
+		Binary: "claude", Adapter: "claude",
+		SkipPermissionsArg: "--dangerously-skip-permissions", SkipPermissionsDefault: true,
+	}
+
+	plan, cleanup, err := BuildPlan(agent, provider, nil, LaunchOptions{CWD: "/tmp/work"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+
+	// Verify command includes --dangerously-skip-permissions
+	if !strings.Contains(plan.Command, "--dangerously-skip-permissions") {
+		t.Fatalf("command missing --dangerously-skip-permissions: %s", plan.Command)
+	}
+	// Verify command includes --settings <path>
+	if !strings.Contains(plan.Command, "--settings") {
+		t.Fatalf("command missing --settings: %s", plan.Command)
+	}
+
+	// Verify settings JSON has skipDangerousModePermissionPrompt=true
+	bytes, _ := os.ReadFile(plan.Files["settings"])
+	var settings map[string]any
+	if err := json.Unmarshal(bytes, &settings); err != nil {
+		t.Fatal(err)
+	}
+	if settings["skipDangerousModePermissionPrompt"] != true {
+		t.Fatalf("expected skipDangerousModePermissionPrompt=true, got %v", settings["skipDangerousModePermissionPrompt"])
+	}
+
+	// Verify env contains provider credentials
+	env := settings["env"].(map[string]any)
+	if env["ANTHROPIC_API_KEY"] != "sk-ant-test" {
+		t.Fatalf("expected ANTHROPIC_API_KEY=sk-ant-test, got %v", env["ANTHROPIC_API_KEY"])
+	}
+	if env["ANTHROPIC_BASE_URL"] != "https://api.anthropic.com" {
+		t.Fatalf("expected ANTHROPIC_BASE_URL=https://api.anthropic.com, got %v", env["ANTHROPIC_BASE_URL"])
+	}
+
+	t.Logf("Command: %s", plan.Command)
+	t.Logf("Settings: %s", string(bytes))
+}
+
 func TestBuildPlanProfileOverrideDisablesSkipPermissions(t *testing.T) {
 	provider := store.Provider{
 		Slug: "shared", BaseURL: "https://example.test/v1", APIKey: "sk",

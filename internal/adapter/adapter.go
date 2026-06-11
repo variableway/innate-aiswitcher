@@ -144,6 +144,12 @@ func buildClaudePlan(ctx BuildContext) (LaunchPlan, func(), error) {
 			}
 		}
 	}
+	// Always skip the "enable dangerous mode?" confirmation dialog in Claude Code.
+	// This is a UI prompt, not an actual permission gate — the real permission
+	// control is the --dangerously-skip-permissions CLI flag handled by
+	// applySkipPermissions.
+	settings["skipDangerousModePermissionPrompt"] = true
+
 	mergeOverrides(settings, profile)
 
 	path, cleanup, err := writeTempJSON("aisw-claude-", ".json", settings)
@@ -255,6 +261,18 @@ func applySkipPermissions(agent store.Agent, profile *store.Profile, args []stri
 	if flag == "" {
 		return args
 	}
+	if !resolveSkipPermissions(agent, profile) {
+		return args
+	}
+	return append(args, flag)
+}
+
+// resolveSkipPermissions returns the effective skip-permissions boolean.
+// Resolution order:
+//   - profile.SkipPermissions "true"/"yes"/"1"/"on"  → true
+//   - profile.SkipPermissions "false"/"no"/"0"/"off" → false
+//   - otherwise → agent.SkipPermissionsDefault
+func resolveSkipPermissions(agent store.Agent, profile *store.Profile) bool {
 	enabled := agent.SkipPermissionsDefault
 	if profile != nil {
 		switch strings.ToLower(strings.TrimSpace(profile.SkipPermissions)) {
@@ -264,10 +282,7 @@ func applySkipPermissions(agent store.Agent, profile *store.Profile, args []stri
 			enabled = false
 		}
 	}
-	if !enabled {
-		return args
-	}
-	return append(args, flag)
+	return enabled
 }
 
 func envOverrides(profile *store.Profile) map[string]string {
