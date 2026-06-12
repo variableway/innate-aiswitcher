@@ -473,8 +473,8 @@ func TestBuildClaudePlanWritesSkipDangerousModePermissionPrompt(t *testing.T) {
 
 	// Always true regardless of agent/profile settings — it's a UI prompt, not a permission gate
 	cases := []struct {
-		name   string
-		agent  store.Agent
+		name    string
+		agent   store.Agent
 		profile *store.Profile
 	}{
 		{"default agent, no profile", store.Agent{Binary: "claude", Adapter: "claude", SkipPermissionsDefault: true}, nil},
