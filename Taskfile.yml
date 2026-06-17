@@ -2,12 +2,17 @@
 #
 # The repository contains several reference projects, so build/test tasks are
 # intentionally scoped to the current MVP packages.
+#
+# Windows note: This Taskfile requires Git Bash or WSL to run. Commands like
+# mkdir -p, cp, and rm are not available in cmd.exe or PowerShell.
 
 version: "3"
 
 vars:
   BIN_DIR: bin
   BINARY: aisw
+  BINARY_EXT:
+    sh: 'if [ "$(go env GOOS)" = "windows" ]; then echo ".exe"; fi'
   CLI_PKG: ./cmd/aisw
   PKGS: ". ./cmd/aisw ./cmd/mock-provider ./internal/... ./migrations"
   SMOKE_DIR: /tmp/aisw-task-smoke
@@ -33,12 +38,20 @@ tasks:
       - go test {{.PKGS}}
 
   build:
-    desc: Build the aisw CLI binary
+    desc: Build the aisw CLI binary for the current host OS
     deps:
       - fmt
     cmds:
       - mkdir -p {{.BIN_DIR}}
-      - go build -o {{.BIN_DIR}}/{{.BINARY}} {{.CLI_PKG}}
+      - go build -o {{.BIN_DIR}}/{{.BINARY}}{{.BINARY_EXT}} {{.CLI_PKG}}
+
+  build:windows:
+    desc: Cross-compile the aisw CLI binary for Windows (amd64)
+    deps:
+      - fmt
+    cmds:
+      - mkdir -p {{.BIN_DIR}}
+      - GOOS=windows GOARCH=amd64 go build -o {{.BIN_DIR}}/{{.BINARY}}_windows_amd64.exe {{.CLI_PKG}}
 
   install:
     desc: Build and install aisw to ~/.local/bin
@@ -46,7 +59,7 @@ tasks:
       - build
     cmds:
       - mkdir -p ~/.local/bin
-      - cp {{.BIN_DIR}}/{{.BINARY}} ~/.local/bin/{{.BINARY}}
+      - cp {{.BIN_DIR}}/{{.BINARY}}{{.BINARY_EXT}} ~/.local/bin/{{.BINARY}}{{.BINARY_EXT}}
 
   compile:
     desc: Compile all current MVP packages

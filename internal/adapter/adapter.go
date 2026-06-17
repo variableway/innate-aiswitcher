@@ -25,6 +25,7 @@ type LaunchOptions struct {
 
 type LaunchPlan struct {
 	Command string            `json:"command"`
+	Args    []string          `json:"args,omitempty"`
 	CWD     string            `json:"cwd"`
 	Env     map[string]string `json:"env,omitempty"`
 	Files   map[string]string `json:"files,omitempty"`
@@ -89,7 +90,14 @@ func Execute(plan LaunchPlan, cleanup func(), opts LaunchOptions) error {
 	if opts.Terminal != "" && opts.Terminal != "current" {
 		return launchTerminal(opts.Terminal, withEnvPrefix(plan.Command, plan.Env), plan.CWD)
 	}
-	cmd := exec.Command("/bin/sh", "-lc", plan.Command)
+	var cmd *exec.Cmd
+	if len(plan.Args) > 0 {
+		cmd = exec.Command(plan.Args[0], plan.Args[1:]...)
+	} else if runtime.GOOS == "windows" {
+		cmd = exec.Command("cmd.exe", "/c", plan.Command)
+	} else {
+		cmd = exec.Command("/bin/sh", "-lc", plan.Command)
+	}
 	if plan.CWD != "" {
 		cmd.Dir = plan.CWD
 	}
@@ -156,8 +164,9 @@ func buildClaudePlan(ctx BuildContext) (LaunchPlan, func(), error) {
 	if err != nil {
 		return LaunchPlan{}, nil, err
 	}
-	cmd := joinCommand(append([]string{agent.Binary, "--settings", path}, args...))
-	return LaunchPlan{Command: cmd, CWD: opts.CWD, Files: map[string]string{"settings": path}}, cleanup, nil
+	launchArgs := append([]string{agent.Binary, "--settings", path}, args...)
+	cmd := joinCommand(launchArgs)
+	return LaunchPlan{Command: cmd, Args: launchArgs, CWD: opts.CWD, Files: map[string]string{"settings": path}}, cleanup, nil
 }
 
 func buildCodexPlan(ctx BuildContext) (LaunchPlan, func(), error) {
@@ -201,9 +210,11 @@ func buildCodexPlan(ctx BuildContext) (LaunchPlan, func(), error) {
 		return LaunchPlan{}, nil, err
 	}
 
-	cmd := joinCommand(append([]string{agent.Binary}, args...))
+	launchArgs := append([]string{agent.Binary}, args...)
+	cmd := joinCommand(launchArgs)
 	plan := LaunchPlan{
 		Command: cmd,
+		Args:    launchArgs,
 		CWD:     opts.CWD,
 		Env:     map[string]string{"CODEX_HOME": dir},
 		Files:   map[string]string{"codex_home": dir, "config": configPath},
@@ -241,7 +252,8 @@ func buildEnvPlan(binary string, env map[string]string, profile *store.Profile, 
 	for key, value := range envOverrides(profile) {
 		env[key] = value
 	}
-	return LaunchPlan{Command: joinCommand(append([]string{binary}, args...)), CWD: opts.CWD, Env: env}
+	launchArgs := append([]string{binary}, args...)
+	return LaunchPlan{Command: joinCommand(launchArgs), Args: launchArgs, CWD: opts.CWD, Env: env}
 }
 
 func defaultArgs(profile *store.Profile) []string {

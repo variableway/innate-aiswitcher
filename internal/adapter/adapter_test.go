@@ -3,6 +3,7 @@ package adapter
 import (
 	"encoding/json"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -249,7 +250,7 @@ func TestBuilderNames(t *testing.T) {
 
 func TestRegister(t *testing.T) {
 	Register("test_adapter", func(ctx BuildContext) (LaunchPlan, func(), error) {
-		return LaunchPlan{Command: "test"}, func() {}, nil
+		return LaunchPlan{Command: "test", Args: []string{"test"}}, func() {}, nil
 	})
 
 	provider := store.Provider{
@@ -343,6 +344,30 @@ func TestSanitizeProviderKey(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("sanitizeProviderKey(%q) = %q, want %q", tt.input, got, tt.want)
 		}
+	}
+}
+
+func TestExecuteUsesArgs(t *testing.T) {
+	var plan LaunchPlan
+	if runtime.GOOS == "windows" {
+		plan = LaunchPlan{Args: []string{"cmd.exe", "/c", "echo", "aisw-execute-test"}}
+	} else {
+		plan = LaunchPlan{Args: []string{"sh", "-c", "echo aisw-execute-test"}}
+	}
+	if err := Execute(plan, func() {}, LaunchOptions{}); err != nil {
+		t.Fatalf("execute failed: %v", err)
+	}
+}
+
+func TestExecuteFallsBackToShell(t *testing.T) {
+	var plan LaunchPlan
+	if runtime.GOOS == "windows" {
+		plan = LaunchPlan{Command: "echo aisw-shell-fallback-test"}
+	} else {
+		plan = LaunchPlan{Command: "echo aisw-shell-fallback-test"}
+	}
+	if err := Execute(plan, func() {}, LaunchOptions{}); err != nil {
+		t.Fatalf("execute fallback failed: %v", err)
 	}
 }
 
