@@ -88,6 +88,65 @@ func TestBuildClaudePlanWritesSessionSettings(t *testing.T) {
 	}
 }
 
+func TestBuildClaudePlanVolcengineGLM(t *testing.T) {
+	// Mirrors the bundled `volcengine` preset projected through ProviderFromPreset:
+	// Volcengine Ark's Anthropic-compatible plan gateway serving glm-5.2, with a
+	// long API timeout and non-essential traffic disabled (matches the working
+	// Claude Code settings for this provider).
+	provider := store.Provider{
+		Slug:         "volcengine-claude",
+		BaseURL:      "https://ark.cn-beijing.volces.com/api/plan",
+		APIKey:       "ark-test-key",
+		APIProtocol:  "anthropic",
+		DefaultModel: "glm-5.2",
+		Endpoints:    map[string]string{"messages": "/v1/messages", "models": "/v1/models"},
+		Capabilities: map[string]interface{}{
+			"claude_extra_env": map[string]interface{}{
+				"API_TIMEOUT_MS": "3000000",
+				"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+			},
+		},
+	}
+
+	// No profile model override -> provider.DefaultModel (glm-5.2) must flow through.
+	plan, cleanup, err := BuildPlan(store.Agent{Binary: "claude", Adapter: "claude"}, provider, nil, LaunchOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+
+	settingsPath := plan.Files["settings"]
+	bytes, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var settings map[string]any
+	if err := json.Unmarshal(bytes, &settings); err != nil {
+		t.Fatal(err)
+	}
+	env := settings["env"].(map[string]any)
+
+	wantEnv := map[string]string{
+		"ANTHROPIC_BASE_URL":                       "https://ark.cn-beijing.volces.com/api/plan",
+		"ANTHROPIC_AUTH_TOKEN":                     "ark-test-key",
+		"ANTHROPIC_API_KEY":                        "ark-test-key",
+		"ANTHROPIC_MODEL":                          "glm-5.2",
+		"ANTHROPIC_DEFAULT_SONNET_MODEL":           "glm-5.2",
+		"ANTHROPIC_DEFAULT_HAIKU_MODEL":            "glm-5.2",
+		"ANTHROPIC_DEFAULT_OPUS_MODEL":             "glm-5.2",
+		"API_TIMEOUT_MS":                           "3000000",
+		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+	}
+	for key, want := range wantEnv {
+		if got, ok := env[key].(string); !ok || got != want {
+			t.Fatalf("env[%s] = %v, want %q", key, env[key], want)
+		}
+	}
+	if settings["skipDangerousModePermissionPrompt"] != true {
+		t.Fatalf("expected skipDangerousModePermissionPrompt=true, got %v", settings["skipDangerousModePermissionPrompt"])
+	}
+}
+
 func TestBuildCodexPlanWritesEphemeralHome(t *testing.T) {
 	provider := store.Provider{
 		Slug:         "Mini Max",

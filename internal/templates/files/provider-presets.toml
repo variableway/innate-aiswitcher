@@ -22,14 +22,6 @@ name = "Kimi / Moonshot"
   default_model = "kimi-latest"
   endpoints = { chat_completions = "/chat_completions", models = "/models" }
 
-  [[presets.url_options]]
-  slug = "claude"
-  label = "Claude Code-compatible"
-  base_url = "https://api.moonshot.cn/anthropic"
-  api_protocol = "anthropic"
-  default_model = "kimi-latest"
-  endpoints = { messages = "/v1/messages", models = "/v1/models" }
-
 [[presets]]
 slug = "minimax"
 name = "MiniMax"
@@ -113,3 +105,27 @@ name = "Anthropic"
   api_protocol = "anthropic"
   default_model = "claude-sonnet-4-6-20250715"
   endpoints = { messages = "/v1/messages", models = "/v1/models" }
+
+[[presets]]
+slug = "volcengine"
+name = "Volcengine Ark (火山方舟)"
+
+  [[presets.url_options]]
+  slug = "openai"
+  label = "OpenAI-compatible"
+  base_url = "https://ark.cn-beijing.volces.com/api/v3"
+  api_protocol = "openai_chat"
+  default_model = "glm-5.2"
+  endpoints = { chat_completions = "/chat/completions", models = "/models" }
+
+  [[presets.url_options]]
+  slug = "claude"
+  label = "Claude Code-compatible"
+  base_url = "https://ark.cn-beijing.volces.com/api/plan"
+  api_protocol = "anthropic"
+  default_model = "glm-5.2"
+  endpoints = { messages = "/v1/messages", models = "/v1/models" }
+  # glm-5.2 is served over Volcengine Ark's Anthropic-compatible plan gateway.
+  # The plan endpoint needs a long timeout and disables non-essential traffic,
+  # matching the working Claude Code settings for this provider.
+  capabilities = { claude_extra_env = { API_TIMEOUT_MS = "3000000", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1" } }

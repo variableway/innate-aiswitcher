@@ -137,14 +137,29 @@ go run ./cmd/aisw --admin-ui --show-admin-banner serve --http 127.0.0.1:8090
 - Configure provider：从内置模板引导配置 API key、URL format、base URL 和 default model。
 - Test provider：用当前 API key/default model 发起最小模型请求；配置后也可以立即测试。
 
-MiniMax 模板提供两个 URL format：OpenAI-compatible 和 Claude Code-compatible。
+内置模板为每个 Provider 提供一个或多个 URL format（OpenAI-compatible / Claude Code-compatible / Codex-compatible）。当前内置模板：
 
-因此同一个 `minimax` Provider 可以同时用于：
+| Preset | URL format | Protocol | Base URL | 默认模型 | 投影 slug |
+| --- | --- | --- | --- | --- | --- |
+| `deepseek` | OpenAI-compatible | `openai_chat` | `https://api.deepseek.com/v1` | `deepseek-v4-flash` | `deepseek` |
+| `kimi` | OpenAI-compatible | `openai_chat` | `https://api.moonshot.cn/v1` | `kimi-latest` | `kimi-openai` |
+| `minimax` | OpenAI-compatible | `openai_chat` | `https://api.minimaxi.com/v1` | `MiniMax-M3` | `minimax-openai` |
+| `minimax` | Claude Code-compatible | `anthropic` | `https://api.minimaxi.com/anthropic` | `MiniMax-M3` | `minimax-claude` |
+| `minimax` | Codex-compatible | `openai_responses` | `https://api.minimaxi.com/v1` | `MiniMax-M3` | `minimax-codex` |
+| `openai` | OpenAI-compatible | `openai_chat` | `https://api.openai.com/v1` | `gpt-4o` | `openai` |
+| `xiaomi` | OpenAI-compatible | `openai_chat` | `https://token-plan-cn.xiaomimimo.com/v1` | `mimo-v2.5-pro` | `xiaomi-openai` |
+| `xiaomi` | Claude Code-compatible | `anthropic` | `https://token-plan-cn.xiaomimimo.com/anthropic` | `mimo-v2.5-pro` | `xiaomi-claude` |
+| `xiaomi` | Codex-compatible | `openai_responses` | `https://token-plan-cn.xiaomimimo.com/v1` | `mimo-v2.5-pro` | `xiaomi-codex` |
+| `anthropic` | Anthropic Messages API | `anthropic` | `https://api.anthropic.com` | `claude-sonnet-4-6-20250715` | `anthropic-claude` |
+| `volcengine` | OpenAI-compatible | `openai_chat` | `https://ark.cn-beijing.volces.com/api/v3` | `glm-5.2` | `volcengine-openai` |
+| `volcengine` | Claude Code-compatible | `anthropic` | `https://ark.cn-beijing.volces.com/api/plan` | `glm-5.2` | `volcengine-claude` |
+
+> 注意：Kimi 只提供 OpenAI-compatible 接口，不支持 Claude Code / Codex 投影。MiniMax 与 Xiaomi（MiMo）一个 Provider 同时挂多个 URL format，因此同一个 Provider 可以被多个 adapter 复用，例如 `minimax`：
 
 ```text
-Provider(minimax) -> Claude adapter -> claude --settings /tmp/...
-Provider(minimax) -> Codex adapter  -> CODEX_HOME=/tmp/... codex
-Provider(minimax) -> Trae adapter   -> OPENAI_API_KEY/OPENAI_BASE_URL trae
+Provider(minimax-claude) -> Claude adapter -> claude --settings /tmp/...
+Provider(minimax-codex)  -> Codex adapter  -> CODEX_HOME=/tmp/... codex
+Provider(minimax-openai) -> Trae adapter   -> OPENAI_API_KEY/OPENAI_BASE_URL trae
 ```
 
 ## 本地验证

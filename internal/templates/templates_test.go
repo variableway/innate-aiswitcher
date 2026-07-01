@@ -34,6 +34,69 @@ func TestProviderPresetsIncludeMinimaxURLChoices(t *testing.T) {
 	}
 }
 
+func TestProviderPresetsVolcengineURLOptions(t *testing.T) {
+	preset, err := FindPreset("volcengine")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(preset.URLOptions) != 2 {
+		t.Fatalf("expected volcengine to have 2 URL options, got %d", len(preset.URLOptions))
+	}
+	options := map[string]URLOption{}
+	for _, option := range preset.URLOptions {
+		options[option.Slug] = option
+	}
+
+	openai := options["openai"]
+	if openai.APIProtocol != "openai_chat" {
+		t.Fatalf("openai option protocol: %s", openai.APIProtocol)
+	}
+	if openai.BaseURL != "https://ark.cn-beijing.volces.com/api/v3" {
+		t.Fatalf("openai option base url: %s", openai.BaseURL)
+	}
+	if openai.DefaultModel != "glm-5.2" {
+		t.Fatalf("openai option default model: %s", openai.DefaultModel)
+	}
+	if openai.Endpoints["chat_completions"] != "/chat/completions" || openai.Endpoints["models"] != "/models" {
+		t.Fatalf("openai option endpoints: %+v", openai.Endpoints)
+	}
+
+	claude := options["claude"]
+	if claude.APIProtocol != "anthropic" {
+		t.Fatalf("claude option protocol: %s", claude.APIProtocol)
+	}
+	if claude.BaseURL != "https://ark.cn-beijing.volces.com/api/plan" {
+		t.Fatalf("claude option base url: %s", claude.BaseURL)
+	}
+	if claude.DefaultModel != "glm-5.2" {
+		t.Fatalf("claude option default model: %s", claude.DefaultModel)
+	}
+	if claude.Endpoints["messages"] != "/v1/messages" || claude.Endpoints["models"] != "/v1/models" {
+		t.Fatalf("claude option endpoints: %+v", claude.Endpoints)
+	}
+	extra, ok := claude.Capabilities["claude_extra_env"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected claude_extra_env capability, got: %+v", claude.Capabilities)
+	}
+	if extra["API_TIMEOUT_MS"] != "3000000" || extra["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] != "1" {
+		t.Fatalf("unexpected claude_extra_env: %+v", extra)
+	}
+
+	// Each option slug differs from the preset slug, so ProviderFromPreset should
+	// project them as "volcengine-openai" / "volcengine-claude" (compare minimax-*).
+	openaiProvider := ProviderFromPreset(*preset, openai, "ark-test")
+	if openaiProvider.Slug != "volcengine-openai" || openaiProvider.APIProtocol != "openai_chat" {
+		t.Fatalf("unexpected openai provider: %s / %s", openaiProvider.Slug, openaiProvider.APIProtocol)
+	}
+	if openaiProvider.BaseURL != "https://ark.cn-beijing.volces.com/api/v3" {
+		t.Fatalf("unexpected openai provider base url: %s", openaiProvider.BaseURL)
+	}
+	claudeProvider := ProviderFromPreset(*preset, claude, "ark-test")
+	if claudeProvider.Slug != "volcengine-claude" || claudeProvider.APIProtocol != "anthropic" {
+		t.Fatalf("unexpected claude provider: %s / %s", claudeProvider.Slug, claudeProvider.APIProtocol)
+	}
+}
+
 func TestConfigExampleIsEmbedded(t *testing.T) {
 	content, err := ConfigExample()
 	if err != nil {

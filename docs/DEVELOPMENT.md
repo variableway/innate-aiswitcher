@@ -111,8 +111,10 @@ var builders = map[string]Builder{
 ## Adding a New Provider Preset
 
 1. Edit `internal/templates/files/provider-presets.toml`.
-2. Add a `[[presets]]` entry with `slug`, `name`, and `[[presets.url_options]]`.
-3. Run `task test` to verify the preset loads correctly.
+2. Add a `[[presets]]` entry with `slug`, `name`, and one or more `[[presets.url_options]]` blocks. Each option needs `slug`, `label`, `base_url`, `api_protocol` (`openai_chat` | `anthropic` | `openai_responses`), `default_model`, and protocol-specific `endpoints`.
+3. If the option targets Claude Code and needs extra session env (long timeouts, traffic flags), set `capabilities = { claude_extra_env = { ... } }` — see the `volcengine` and `xiaomi` claude options for the pattern. For Codex bearer-token auth, set `capabilities = { codex_auth_mode = "experimental_bearer_token" }`.
+4. Slug projection: when an option's `slug` differs from the preset `slug` (or a preset has multiple options), `ProviderFromPreset` projects the provider as `preset-slug`-`option-slug` (e.g. `volcengine-claude`, `minimax-codex`). Single-option presets where they match keep the original slug (e.g. `deepseek`, `openai`).
+5. Run `task test` to verify the preset loads correctly, and add a preset-shape test in `internal/templates/templates_test.go` (compare `TestProviderPresetsVolcengineURLOptions`).
 
 ## Code Style
 
