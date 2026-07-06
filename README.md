@@ -8,11 +8,11 @@
 
 - `providers`：统一的 LLM Provider 中心表，保存 base URL、API key、协议、默认模型、endpoint overrides、headers/capabilities。
 - `agents`：只描述 Agent 本身，例如 `claude`、`codex`、`gemini`、`trae`、`opencode`，以及对应 adapter/binary。
-- 内置 Agent 包含 `claude`、`codex`、`gemini`、`kimi`、`trae`、`opencode`。
+- 内置 Agent 包含 `claude`、`codex`、`gemini`、`kimi`、`trae`、`opencode`、`hermes`、`openclaw`。
 - `profiles`：Agent + Provider 的轻量绑定，用来保存某个 Agent 的模型覆盖、启动参数、env/config overrides。
 - `adapter`：启动时的投影层，不拥有 Provider；同一个 Provider 可被 Claude/Codex/Trae 等 adapter 复用。
 - `config.toml`：共享配置镜像，结构是 `[[providers]] + [[profiles]]`，不是按 App 重复 Provider；模板会打包进 `bin/aisw`。
-- `PocketBase REST`：SQLite collections 可由 CLI 使用，也可供后续 UI 通过 REST 读取。
+- `PocketBase REST` + **Web UI**：`aisw serve` 同时提供嵌入式配置页面（`http://127.0.0.1:8090/`）和 `/api/aisw/*` REST API；CLI 与 Web UI 共享同一 SQLite 数据库。
 
 ## 当前命令
 
@@ -23,7 +23,7 @@ task build      # build bin/aisw
 task test       # run scoped unit tests
 task verify     # fmt + test + compile + build + go mod verify
 task smoke      # run a local CLI smoke test
-task serve      # start PocketBase REST server
+task serve      # start REST API + embedded Web UI
 ```
 
 也可以直接使用 Go 命令运行 CLI，CLI 主入口位于 `cmd/aisw`。
@@ -94,29 +94,34 @@ go run ./cmd/aisw config import --path ~/.innate-aiswitcher/config.toml --backup
 
 `config import` 默认会先导出一份包含 secret 的备份；如确实不需要，可传 `--no-backup`。导出/模板写入使用临时文件 + rename 的原子写入流程，导入 providers/profiles 时使用 SQLite transaction，失败会回滚。
 
-启动 PocketBase 服务：
+启动 REST API + Web UI：
 
 ```bash
 go run ./cmd/aisw serve --http 127.0.0.1:8090
+# 或
+task serve
 ```
 
-默认 `serve` 不启用 PocketBase admin UI，也不打印 admin install URL。需要后台管理页面时显式开启：
+浏览器打开 **http://127.0.0.1:8090/** 可管理 Provider/Profile（添加、编辑、从预设导入、连通性测试）。
+
+默认 `serve` 不启用 PocketBase admin UI。需要 PocketBase 后台管理页面时显式开启：
 
 ```bash
 go run ./cmd/aisw --admin-ui --show-admin-banner serve --http 127.0.0.1:8090
 ```
 
-可用 REST：
+自定义 REST（完整参考见 [docs/API.md](docs/API.md)）：
 
-- `GET /api/aisw/health`
-- `GET /api/aisw/catalog`
-- `GET /api/aisw/providers/{slug}/models`
-- `POST /api/aisw/providers/{slug}/test`
-- `GET /api/collections/agents/records`
-- `GET /api/collections/providers/records`
-- `GET /api/collections/profiles/records`
+- `GET /` — 嵌入式 Web UI
+- `GET /api/aisw/health`、`GET /api/aisw/catalog`
+- `GET/POST/PUT/DELETE /api/aisw/providers[/{slug}]` — Provider CRUD
+- `POST /api/aisw/providers/from-preset` — 从内置预设导入
+- `GET /api/aisw/providers/{slug}/models`、`POST .../test`
+- `GET/POST/PUT/DELETE /api/aisw/profiles[/{slug}]` — Profile CRUD
+- `GET /api/aisw/agents`、`GET /api/aisw/presets`
+- `GET /api/collections/{agents|providers|profiles}/records` — PocketBase 只读集合
 
-`providers.api_key` 是 PocketBase hidden field，不会从公开只读 API 返回。
+`/api/aisw/providers` 返回的 `api_key` 为掩码形式；PocketBase 集合端点的 `api_key` 为 hidden field，不会返回。
 
 ## Provider 与 Adapter 解耦
 
@@ -127,6 +132,15 @@ go run ./cmd/aisw --admin-ui --show-admin-banner serve --http 127.0.0.1:8090
 - Profile 是可选绑定，不复制 Provider；它只保存 Agent 维度的覆盖项。
 - 默认模型来自 Provider/template。`test provider` 不会再按协议猜默认模型；没有 `default_model` 时必须显式传 `--model`。
 - Adapter 使用 registry map 管理，新增 adapter 时注册 builder，不需要在核心路径追加 `switch` 分支。
+
+## Web UI
+
+`task serve` 或 `aisw serve` 会在 **http://127.0.0.1:8090/** 提供嵌入式配置页面：
+
+- **Providers**：查看、添加、编辑、删除；从内置预设一键导入；Test 连通性
+- **Profiles**：创建 Agent + Provider 绑定；设置默认 Profile；覆盖模型与 CLI 参数
+
+Web UI 与 CLI 共享 `~/.innate-aiswitcher/pb_data/` 中的同一数据库，可交替使用。
 
 ## TUI
 
@@ -175,6 +189,6 @@ task smoke
 
 仓库里还有用于参考的外部项目/示例目录，其中部分 Go 示例缺自己的依赖，因此 `go test ./...`、`go build ./...`、`go mod tidy` 会被那些参考目录影响。当前项目包请使用 `Taskfile.yml` 中的 scoped 任务。
 
-完整规格见 [docs/SPEC.md](docs/SPEC.md)。
+完整规格见 [docs/SPEC.md](docs/SPEC.md)。使用指南见 [docs/USAGE.md](docs/USAGE.md)。
 
 各 Agent（Claude Code、Codex CLI、OpenCode 等）的详细测试指南见 [docs/AGENT_TESTING.md](docs/AGENT_TESTING.md)。

@@ -15,7 +15,8 @@ This guide is for contributors working on `innate-aiswitcher`.
 │   ├── safefile/      # Atomic file writes
 │   ├── store/         # Typed PocketBase collection wrappers
 │   ├── templates/     # Embedded config/preset templates
-│   └── tui/           # Interactive terminal UI
+│   ├── tui/           # Interactive terminal UI
+│   └── webui/         # Embedded Web UI (static HTML/CSS/JS via go:embed)
 ├── migrations/        # PocketBase collection migrations
 ├── docs/              # Documentation
 └── Taskfile.yml       # Build tasks
@@ -133,9 +134,9 @@ Use conventional commit prefixes:
 - `docs:` — documentation only
 - `chore:` — maintenance, build, tooling
 
-## REST Development
+## REST & Web UI Development
 
-Start the server for local API work:
+Start the server for local API and Web UI work:
 
 ```bash
 task serve
@@ -147,11 +148,15 @@ Or directly:
 go run ./cmd/aisw serve --http 127.0.0.1:8090
 ```
 
-Enable the admin UI:
+Open **http://127.0.0.1:8090/** in a browser. The UI calls `/api/aisw/*` endpoints registered in `internal/app/app.go` (`registerProviderRoutes`, `registerProfileRoutes`, `registerAgentRoutes`, `registerPresetRoutes`). Static assets live in `internal/webui/static/` and are served via `internal/webui/webui.go`.
+
+Enable the PocketBase admin UI (separate from the AISwitcher Web UI):
 
 ```bash
 go run ./cmd/aisw --admin-ui serve --http 127.0.0.1:8090
 ```
+
+Use `--quiet` on `serve` to suppress HTTP access logs. API reference: [API.md](API.md).
 
 ---
 

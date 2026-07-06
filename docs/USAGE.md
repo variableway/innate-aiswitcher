@@ -45,10 +45,22 @@ go run ./cmd/aisw serve --http 127.0.0.1:8090
 启动后会看到：
 
 ```
-Starting AISwitcher server on 127.0.0.1:8090 ...
-  Web UI:    http://127.0.0.1:8090/
-  REST API:  http://127.0.0.1:8090/api/aisw/
+aisw: data dir ~/.innate-aiswitcher/pb_data
+aisw: bootstrapping database...
+aisw: server listening on http://127.0.0.1:8090
+aisw: web UI    http://127.0.0.1:8090/
+aisw: REST API  http://127.0.0.1:8090/api/aisw/
 ```
+
+`serve` 常用参数：
+
+| 参数 | 说明 |
+|------|------|
+| `--http ADDR` | 监听地址（默认 `127.0.0.1:8090`） |
+| `--quiet` | 关闭 HTTP 访问日志 |
+| `--origins` | CORS 允许来源（默认 `*`） |
+| `--admin-ui` | 启用 PocketBase 管理后台 `/_` |
+| `--show-admin-banner` | 显示 PocketBase 启动 banner |
 
 ### 方式三：开发模式（构建 + 启动一步完成）
 
@@ -86,6 +98,8 @@ task dev
 - 创建 Agent + Provider 组合
 - 设置默认 Profile
 - 覆盖模型选择、CLI 参数、权限设置
+
+REST API 完整参考见 [API.md](API.md)。
 
 ---
 

@@ -8,10 +8,10 @@
 
 ## 2. Non-Goals For MVP
 
-- 不在 MVP 中实现完整 Web UI。
+- 不在 MVP 中实现 launch history 可视化仪表盘。
 - 不在 MVP 中承诺 Trae/OpenCode 的最终真实配置协议；当前先用 OpenAI-compatible env adapter。
 - 不把 Provider 复制到每个 Agent 自己的 ProviderManager。
-- 不把真实 API key 暴露到公开 REST 响应。
+- 不把完整 API key 暴露到公开 REST 响应（掩码或 hidden field）。
 - 不按协议猜测 default model；default model 必须来自 Provider/template 或用户显式输入。
 
 ## 3. Data Model
@@ -26,7 +26,7 @@ PocketBase/SQLite collections:
 - `agents`
   - Agent catalog.
   - Fields: `slug`, `name`, `binary`, `adapter`, `env_map`, `active`.
-  - Seeded slugs: `claude`, `codex`, `gemini`, `kimi`, `trae`, `opencode`.
+  - Seeded slugs: `claude`, `codex`, `gemini`, `kimi`, `trae`, `opencode`, `hermes`, `openclaw`.
 - `profiles`
   - Agent-specific binding to a shared Provider.
   - Fields: `slug`, `name`, relation `agent`, relation `provider`, `model`, `config_overrides`, `env_overrides`, `default_args`, `is_default`.
@@ -86,7 +86,7 @@ Current adapters:
   - Uses session env: `GEMINI_API_KEY`, `GOOGLE_GEMINI_BASE_URL`.
 - `openai_env`
   - Uses session env: `OPENAI_API_KEY`, `OPENAI_BASE_URL`.
-  - Used by Kimi/Trae/OpenCode until their exact adapter contracts are finalized.
+  - Used by Kimi, Trae, OpenCode, Hermes, OpenClaw until their exact adapter contracts are finalized.
 
 ## 5. CLI Contract
 
@@ -167,38 +167,66 @@ Provider configuration must guide API key, URL format, base URL, and default mod
 
 Default serve behavior:
 
-- `aisw serve` starts the API server without enabling the PocketBase admin UI.
-- `aisw serve` hides the PocketBase startup banner and admin install URL by default.
-- To enable the admin UI at `/_`, start with `--admin-ui`.
-- To show the PocketBase startup banner/admin install URL, start with `--show-admin-banner`.
+- `aisw serve` starts the API server and embedded Web UI at `/`.
+- `aisw serve` does not enable the PocketBase admin UI by default.
+- PocketBase startup banner is hidden unless `--show-admin-banner` is passed.
+- `--quiet` disables HTTP access logs.
+- Default listen address: `127.0.0.1:8090` (override with `--http`).
 
 Example:
 
 ```bash
+aisw serve --http 127.0.0.1:8090
 aisw --admin-ui --show-admin-banner serve --http 127.0.0.1:8090
 ```
 
-Custom REST endpoints:
+### 6.1 Custom REST Endpoints
 
-- `GET /api/aisw/health`
-  - Returns service health.
-- `GET /api/aisw/catalog`
-  - Returns agents and providers with provider API keys redacted.
-- `GET /api/aisw/providers/{slug}/models`
-  - Lists provider models using the same endpoint/auth rules as CLI.
-- `POST /api/aisw/providers/{slug}/test`
-  - Runs the same provider connectivity test as CLI.
-  - Body: `{ "model": "optional-model" }`.
+Discovery:
 
-PocketBase collection REST:
+- `GET /api/aisw/health` — service health.
+- `GET /api/aisw/catalog` — agents + providers (`api_key` blanked).
+- `GET /api/aisw/agents` — agent catalog.
+- `GET /api/aisw/presets` — bundled provider presets.
+
+Provider CRUD + operations:
+
+- `GET /api/aisw/providers` — list (masked `api_key`).
+- `GET /api/aisw/providers/{slug}` — get one.
+- `POST /api/aisw/providers` — create/upsert.
+- `PUT /api/aisw/providers/{slug}` — update; empty `api_key` preserves existing.
+- `DELETE /api/aisw/providers/{slug}` — delete.
+- `POST /api/aisw/providers/from-preset` — import from preset (`preset_slug`, `option_slug`, `api_key`).
+- `GET /api/aisw/providers/{slug}/models` — model listing (same as CLI).
+- `POST /api/aisw/providers/{slug}/test` — connectivity test; body `{ "model": "optional" }`.
+
+Profile CRUD:
+
+- `GET /api/aisw/profiles`
+- `POST /api/aisw/profiles`
+- `PUT /api/aisw/profiles/{slug}`
+- `DELETE /api/aisw/profiles/{slug}`
+
+Custom write endpoints are unauthenticated and intended for localhost use only.
+
+### 6.2 Web UI
+
+- Static files embedded in `internal/webui/static/` via `go:embed`.
+- Served at `GET /` (plus `/style.css`, `/app.js`).
+- Uses `/api/aisw/*` for Provider/Profile CRUD, preset import, and connectivity tests.
+- Shares the same PocketBase SQLite database as the CLI.
+
+### 6.3 PocketBase Collection REST
+
+Read-only public access:
 
 - `GET /api/collections/agents/records`
 - `GET /api/collections/providers/records`
 - `GET /api/collections/profiles/records`
 
-Collections are public read for UI discovery. Anonymous create/update/delete is not enabled.
+Anonymous create/update/delete is not enabled on collections.
 
-## 6.1 Template Contract
+## 6.4 Template Contract
 
 Config and provider templates must be embedded into the binary with `go:embed` so `bin/aisw` can run template commands without external files.
 
@@ -223,11 +251,15 @@ Tasks:
 - `task compile`
   - Compiles scoped packages: `go build . ./cmd/aisw ./cmd/mock-provider ./internal/... ./migrations`.
 - `task verify`
-  - Runs format, test, compile, build, and `go mod verify`.
+  - Runs format, vet, test, build, and `go mod verify`.
 - `task smoke`
   - Uses a temporary PocketBase data dir and local mock provider to test provider add, provider API test, model listing, profile add, dry-run launch, and config export.
 - `task serve`
-  - Starts PocketBase REST server for local UI/API work.
+  - Starts REST API + embedded Web UI at `http://127.0.0.1:8090/`.
+- `task serve:verbose`
+  - Same as `serve` but passes `--show-admin-banner`.
+- `task dev`
+  - Builds binary then runs `serve`.
 - `task clean`
   - Removes local build artifacts.
 
@@ -251,9 +283,9 @@ Expected coverage:
 
 ## 9. Future Work
 
-1. Add project/global default binding resolution.
+1. Add project/global default binding resolution beyond `.aiswrc`.
 2. Add exact Trae/OpenCode adapters after confirming their current CLI contracts.
-3. Add authenticated write REST for UI operations.
+3. Add authentication for write REST when exposing beyond localhost.
 4. Expand provider preset catalog and model discovery beyond the current smoke-tested MVP.
 5. Add secret storage backends such as macOS Keychain.
 6. Add launch history UI and provider health dashboard.

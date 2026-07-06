@@ -144,9 +144,11 @@ opencode --version
 
 ## 5. 与 innate-aiswitcher 配合使用
 
-安装完成后，通过 `aisw` 配置 Provider 和 Profile：
+安装完成后，通过 `aisw` 配置 Provider 和 Profile。可用 **Web UI**（`task serve` 后打开 http://127.0.0.1:8090/）或 CLI：
 
 ```bash
+# Web UI：task serve → 浏览器打开 http://127.0.0.1:8090/
+
 # 查看内置 Provider 模板
 .\bin\aisw provider presets        # Windows
 ./bin/aisw provider presets         # macOS/Linux

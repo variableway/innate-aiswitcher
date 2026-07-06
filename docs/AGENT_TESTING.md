@@ -14,6 +14,8 @@
 | **Kimi CLI** | `kimi` | `openai_env` | 设置 `OPENAI_API_KEY` + `OPENAI_BASE_URL` |
 | **Trae CLI** | `trae` | `openai_env` | 设置 `OPENAI_API_KEY` + `OPENAI_BASE_URL` |
 | **OpenCode** | `opencode` | `openai_env` | 设置 `OPENAI_API_KEY` + `OPENAI_BASE_URL` |
+| **Hermes** | `hermes` | `openai_env` | 设置 `OPENAI_API_KEY` + `OPENAI_BASE_URL` |
+| **OpenClaw** | `openclaw` | `openai_env` | 设置 `OPENAI_API_KEY` + `OPENAI_BASE_URL` |
 
 > **注意**：`test provider` 和 `test models` 是 **Provider 级别**的测试，不依赖具体 Agent。任何支持 `anthropic`、`openai_chat` 或 `openai_responses` 协议的 Provider 都可以被测试。
 
@@ -280,4 +282,4 @@ cd ~/work-project
 
 ---
 
-*最后更新：2025-06-07*
+*最后更新：2026-07-06*

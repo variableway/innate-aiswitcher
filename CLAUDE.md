@@ -18,7 +18,7 @@ task test        # scoped: go test . ./cmd/aisw ./cmd/mock-provider ./internal/.
 task compile     # scoped: go build across the same set
 task verify      # fmt + test + compile + build + go mod verify
 task smoke       # full CLI integration: temp pb_data + local mock-provider + provider/profile/test/start/export
-task serve       # pocketbase REST on 127.0.0.1:8090
+task serve       # REST API + Web UI on 127.0.0.1:8090
 task run         # go run ./cmd/aisw — launches the TUI
 task install     # build + cp bin/aisw to ~/.local/bin
 task clean       # rm -rf bin
@@ -40,6 +40,7 @@ internal/configfile/       # TOML export/import of the shared config mirror
 internal/httpcheck/        # connectivity check + model listing (CLI + REST)
 internal/templates/        # go:embed of config.example.toml and provider-presets.toml
 internal/tui/              # huh/bubbletea forms for configure-provider / start-session
+internal/webui/            # go:embed static Web UI served at GET /
 internal/projectconfig/    # .aiswrc discovery (walk-up lookup)
 internal/safefile/         # atomic temp-file + fsync + rename writer
 migrations/                # PocketBase collection migrations + agent seeds
@@ -94,7 +95,18 @@ All disk writes that must not be partially observed (config export, init-config 
 
 ### REST surface (when `aisw serve` is running)
 
-Custom routes in `internal/app/app.go` `registerRoutes`: `GET /api/aisw/health`, `GET /api/aisw/catalog` (returns agents + providers with `api_key` blanked), `GET /api/aisw/providers/{slug}/models`, `POST /api/aisw/providers/{slug}/test` with optional `{"model": "..."}` body. Standard PocketBase collection reads are exposed at `/api/collections/{agents|providers|profiles}/records`. Admin UI is off by default — pass `--admin-ui` and `--show-admin-banner` to enable. Keys are never returned.
+Embedded Web UI at `GET /` (`internal/webui`).
+
+Custom routes in `internal/app/app.go` `registerRoutes`:
+
+- Discovery: `GET /api/aisw/health`, `GET /api/aisw/catalog`, `GET /api/aisw/agents`, `GET /api/aisw/presets`
+- Provider CRUD: `GET/POST /api/aisw/providers`, `GET/PUT/DELETE /api/aisw/providers/{slug}`, `POST /api/aisw/providers/from-preset`
+- Provider ops: `GET /api/aisw/providers/{slug}/models`, `POST /api/aisw/providers/{slug}/test` (optional `{"model":"..."}` body)
+- Profile CRUD: `GET/POST /api/aisw/profiles`, `PUT/DELETE /api/aisw/profiles/{slug}`
+
+`/api/aisw/providers*` masks `api_key`; `catalog` blanks it. `PUT` with empty `api_key` preserves the stored key.
+
+Standard PocketBase collection reads: `GET /api/collections/{agents|providers|profiles}/records`. Admin UI is off by default — pass `--admin-ui` and `--show-admin-banner` to enable PocketBase `/_`.
 
 ## Conventions
 

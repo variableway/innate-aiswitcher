@@ -719,31 +719,45 @@ go build -o bin/aisw ./cmd/aisw
 
 ### 3.2 配置流程
 
-```bash
-# 1. 启动 TUI 交互配置
-./bin/aisw
+**方式 A：Web UI（推荐）**
 
-# 2. 或命令行配置
+```bash
+# 启动服务
+task serve
+# 浏览器打开 http://127.0.0.1:8090/
+```
+
+在 Web UI 中可添加/编辑 Provider、从内置预设导入、创建 Profile、测试连通性。与 CLI 共享同一数据库。
+
+**方式 B：TUI**
+
+```bash
+./bin/aisw
+```
+
+**方式 C：命令行**
+
+```bash
 # 查看内置预设
 ./bin/aisw provider presets
 
-# 3. 添加 Provider
+# 添加 Provider
 ./bin/aisw provider add deepseek \
   --base-url https://api.deepseek.com/v1 \
   --api-key-env DEEPSEEK_API_KEY \
   --protocol openai_chat \
   --model deepseek-chat
 
-# 4. 创建 Profile
+# 创建 Profile
 ./bin/aisw profile add hermes-deepseek \
   --agent hermes \
   --provider deepseek \
   --model deepseek-chat
 
-# 5. 测试连通性
+# 测试连通性
 ./bin/aisw test provider deepseek
 
-# 6. 启动 Agent
+# 启动 Agent
 ./bin/aisw start hermes hermes-deepseek
 ```
 

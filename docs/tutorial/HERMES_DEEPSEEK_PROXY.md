@@ -87,6 +87,8 @@ Layer 3: 本地 Agent (执行层)
 
 ## 3. 环境准备
 
+构建 innate-aiswitcher 后，可用 `task serve` 启动 Web UI（http://127.0.0.1:8090/）图形化配置 Provider/Profile，或使用下方 CLI 脚本。
+
 ### 3.1 安装依赖
 
 ```bash

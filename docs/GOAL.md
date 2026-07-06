@@ -19,7 +19,7 @@ Provider 与 Agent Adapter 解耦是合理且必要的：
 
 - PocketBase + SQLite 后台数据存储。
 - Collections: `providers`、`agents`、`profiles`、`bindings`、`launch_history`、`settings`。
-- Seed agents: Claude Code、Codex CLI、Gemini CLI、Kimi CLI、Trae CLI、OpenCode。
+- Seed agents: Claude Code、Codex CLI、Gemini CLI、Kimi CLI、Trae CLI、OpenCode、Hermes、OpenClaw。
 - Provider catalog includes bundled presets with base URL、protocol、default model and endpoint overrides。
 - CLI commands: `provider`、`profile`、`start`、`test provider`、`test models`、`config template/import/export`。
 - TUI default entry for choosing Agent + Provider, testing Provider connectivity, and starting/dry-running a session。
@@ -31,13 +31,14 @@ Provider 与 Agent Adapter 解耦是合理且必要的：
 - Basic model listing through provider `models` endpoint overrides/fallbacks。
 - Config export/template writes are atomic; config import is backed up by default and applied transactionally。
 - REST endpoints for health/catalog/provider test/model listing plus public read access to agent/provider/profile collections。
+- Embedded Web UI at `GET /` with Provider/Profile CRUD, preset import, and connectivity tests via `/api/aisw/*` write endpoints。
 
 ## Implementation Plan For Next Iterations
 
-1. Add project/global bindings so `start AGENT` can infer a default Provider/Profile from current working directory.
+1. Add project/global bindings so `start AGENT` can infer a default Provider/Profile from current working directory beyond `.aiswrc`.
 2. Expand adapter fidelity for Trae/OpenCode once their exact CLI config expectations are confirmed.
-3. Add authenticated write REST endpoints or PocketBase auth flow for a future UI.
-4. Add a web UI over PocketBase REST for Provider/Profile management and launch history.
+3. Add authentication when exposing write REST beyond localhost.
+4. Add launch history visualization in Web UI.
 5. Add secret handling options beyond hidden PocketBase fields, such as keychain integration.
 6. Expand the provider preset catalog and model discovery coverage for more providers.
 
