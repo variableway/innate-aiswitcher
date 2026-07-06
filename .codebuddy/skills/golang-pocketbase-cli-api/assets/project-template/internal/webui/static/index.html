@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MyApp Config</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>MyApp Configuration</h1>
+  </header>
+  <main>
+    <section id="item-list">
+      <h2>Items</h2>
+      <table>
+        <thead><tr><th>Slug</th><th>Name</th><th>Active</th></tr></thead>
+        <tbody id="items-body"></tbody>
+      </table>
+    </section>
+    <section id="item-form">
+      <h2>Add / Edit Item</h2>
+      <form id="form">
+        <input name="slug" placeholder="Slug" required>
+        <input name="name" placeholder="Name" required>
+        <input name="description" placeholder="Description">
+        <button type="submit">Save</button>
+      </form>
+    </section>
+  </main>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+# Taskfile for MyApp
+# https://taskfile.dev
+
+version: '3'
+
+vars:
+  BIN: '{{if eq OS "windows"}}bin\myapp.exe{{else}}bin/myapp{{end}}'
+
+tasks:
+  default:
+    desc: Build and show help
+    cmds:
+      - task: build
+      - '{{.BIN}} --help'
+
+  build:
+    desc: Build the binary
+    cmds:
+      - go build -o {{.BIN}} ./main.go
+
+  run:
+    desc: Run the default command
+    cmds:
+      - task: build
+      - '{{.BIN}}'
+
+  serve:
+    desc: Build and start the server
+    cmds:
+      - task: build
+      - '{{.BIN}} serve --http 127.0.0.1:8090'
+
+  dev:
+    desc: Run with go run (no build step)
+    cmds:
+      - go run ./main.go serve --http 127.0.0.1:8090
+
+  clean:
+    desc: Remove build artifacts and data
+    cmds:
+      - '{{if eq OS "windows"}}cmd /c "if exist bin rmdir /s /q bin"{{else}}rm -rf bin{{end}}'
+      - '{{if eq OS "windows"}}cmd /c "if exist pb_data rmdir /s /q pb_data"{{else}}rm -rf pb_data{{end}}'
