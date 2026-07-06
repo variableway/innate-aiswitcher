@@ -1,237 +1,183 @@
-# Usage Guide
+# AISwitcher 使用指南
 
-This guide covers day-to-day usage of `innate-aiswitcher` (aisw).
+## 前置要求
 
-## Table of Contents
+- **Go 1.26+**
+- **[Task](https://taskfile.dev)** (可选，推荐用于快速构建/启动)
 
-- [Quick Start](#quick-start)
-- [Interactive Mode (TUI)](#interactive-mode-tui)
-- [Managing Providers](#managing-providers)
-- [Managing Profiles](#managing-profiles)
-- [Starting a Session](#starting-a-session)
-- [Testing Providers](#testing-providers)
-- [Config Import / Export](#config-import--export)
-- [REST Server](#rest-server)
+```powershell
+# 安装 Task (Windows PowerShell)
+winget install go-task.task
 
-## Quick Start
-
-Build the CLI:
-
-```bash
-task build
+# 或通过 Scoop
+scoop install task
 ```
-
-Run the interactive TUI:
-
-```bash
-./bin/aisw
-# or
-go run ./cmd/aisw
-```
-
-## Interactive Mode (TUI)
-
-The default entrypoint opens an interactive menu:
-
-```bash
-go run ./cmd/aisw
-```
-
-Options include:
-
-1. **Start an agent session** — pick an Agent and a Provider/Profile.
-2. **List providers** — view all configured providers with key status.
-3. **Configure provider** — add a provider using built-in presets.
-4. **Test provider** — send a minimal request to verify connectivity.
-
-## Managing Providers
-
-### List built-in presets
-
-```bash
-aisw provider presets
-```
-
-### Add a provider manually
-
-```bash
-aisw provider add minimax \
-  --base-url https://api.minimax.ai/v1 \
-  --api-key sk-xxxxxxxx \
-  --protocol openai_chat \
-  --model abab6.5s \
-  --endpoint chat_completions=/chat/completions \
-  --endpoint models=/models
-```
-
-### Add a provider using an environment variable for the key
-
-```bash
-aisw provider add openai \
-  --base-url https://api.openai.com/v1 \
-  --api-key-env OPENAI_API_KEY \
-  --protocol openai_chat \
-  --model gpt-4o
-```
-
-### List configured providers
-
-```bash
-aisw provider list
-```
-
-### Delete a provider
-
-```bash
-aisw provider delete minimax
-```
-
-## Managing Profiles
-
-A **Profile** binds an Agent to a Provider with optional overrides (model, args, env).
-
-### Add a profile
-
-```bash
-aisw profile add claude-minimax \
-  --agent claude \
-  --provider minimax \
-  --model abab6.5s
-```
-
-### List profiles
-
-```bash
-aisw profile list
-```
-
-## Starting a Session
-
-### Start with a provider directly
-
-```bash
-aisw start claude minimax
-```
-
-### Start with a profile
-
-```bash
-aisw start claude claude-minimax
-```
-
-### Dry-run to preview the launch plan
-
-```bash
-aisw start claude minimax --dry-run
-```
-
-Dry-run prints the JSON launch plan without executing it:
-
-```json
-{
-  "command": "claude --settings /tmp/aisw-claude-...",
-  "cwd": "/current/project",
-  "env": {},
-  "files": {
-    "settings": "/tmp/aisw-claude-..."
-  }
-}
-```
-
-### Pass extra arguments to the agent
-
-```bash
-aisw start codex codex-minimax -- --debug
-```
-
-## Testing Providers
-
-### Test provider connectivity
-
-Sends a minimal API request using the provider's default model:
-
-```bash
-aisw test provider minimax
-```
-
-Override the model for the test:
-
-```bash
-aisw test provider minimax --model abab6.5s-chat
-```
-
-### List available models
-
-```bash
-aisw test models minimax
-```
-
-## Config Import / Export
-
-### Export config (without secrets)
-
-```bash
-aisw config export --path ~/.innate-aiswitcher/config.toml
-```
-
-### Export config with secrets
-
-```bash
-aisw config export --path ~/.innate-aiswitcher/config.toml --include-secrets
-```
-
-### Import config
-
-Imports providers and profiles from a TOML file. A backup is created automatically:
-
-```bash
-aisw config import --path ~/.innate-aiswitcher/config.toml
-```
-
-Skip the automatic backup:
-
-```bash
-aisw config import --path ~/.innate-aiswitcher/config.toml --no-backup
-```
-
-### Generate a config template
-
-```bash
-aisw config template --path ~/.innate-aiswitcher/config.toml
-```
-
-## REST Server
-
-Start the PocketBase-backed REST API:
-
-```bash
-aisw serve --http 127.0.0.1:8090
-```
-
-Enable the admin UI (available at `/_`):
-
-```bash
-aisw --admin-ui serve --http 127.0.0.1:8090
-```
-
-### Custom endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/aisw/health` | Service health |
-| GET | `/api/aisw/catalog` | Agents and providers (keys redacted) |
-| GET | `/api/aisw/providers/{slug}/models` | List models for a provider |
-| POST | `/api/aisw/providers/{slug}/test` | Test provider connectivity |
-
-### PocketBase collection endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/collections/agents/records` | List agents |
-| GET | `/api/collections/providers/records` | List providers (API key hidden) |
-| GET | `/api/collections/profiles/records` | List profiles |
 
 ---
 
-For architecture details, see [SPEC.md](SPEC.md).  
-For development and contribution guidelines, see [DEVELOPMENT.md](DEVELOPMENT.md).
+## 快速开始
+
+### 方式一：使用 Task (推荐)
+
+```bash
+# 1. 构建二进制
+task build
+
+# 2. 启动 Web UI + API 服务
+task serve
+```
+
+打开浏览器访问 **http://127.0.0.1:8090/** 进入配置页面。
+
+### 方式二：直接使用 Go
+
+```bash
+# 构建
+go build -o bin/aisw.exe ./cmd/aisw
+
+# 启动 Web 服务
+go run ./cmd/aisw serve --http 127.0.0.1:8090
+
+# 或运行构建好的二进制
+.\bin\aisw.exe serve --http 127.0.0.1:8090
+```
+
+启动后会看到：
+
+```
+Starting AISwitcher server on 127.0.0.1:8090 ...
+  Web UI:    http://127.0.0.1:8090/
+  REST API:  http://127.0.0.1:8090/api/aisw/
+```
+
+### 方式三：开发模式（构建 + 启动一步完成）
+
+```bash
+task dev
+```
+
+---
+
+## Task 命令速查
+
+| 命令 | 说明 |
+|------|------|
+| `task build` | 构建二进制到 `bin/aisw.exe` |
+| `task serve` | 启动 API 服务 + Web UI |
+| `task serve:verbose` | 启动服务并显示 PocketBase 完整日志 |
+| `task dev` | 构建并启动服务（一步完成） |
+| `task run` | 启动交互式 TUI |
+| `task test` | 运行单元测试 |
+| `task verify` | 格式化 + 检查 + 测试 + 构建 |
+| `task clean` | 清理构建产物 |
+
+---
+
+## Web UI 功能
+
+打开 `http://127.0.0.1:8090/` 后，可以在浏览器中：
+
+### Providers 管理
+- 查看、添加、编辑、删除 LLM Provider 配置
+- **从预设导入**：内置 DeepSeek、Kimi、MiniMax、OpenAI、Anthropic、小米 MiMo、火山方舟等 7 个 Provider 预设，一键导入
+- 点击 **Test** 按钮测试 Provider 连通性
+
+### Profiles 管理
+- 创建 Agent + Provider 组合
+- 设置默认 Profile
+- 覆盖模型选择、CLI 参数、权限设置
+
+---
+
+## CLI 常用命令
+
+### Provider 管理
+
+```bash
+# 列出所有 Provider
+aisw provider list
+
+# 添加 Provider
+aisw provider add deepseek \
+  --name "DeepSeek" \
+  --base-url https://api.deepseek.com/v1 \
+  --api-key sk-xxx \
+  --protocol openai_chat \
+  --model deepseek-v4-flash
+
+# 查看内置预设
+aisw provider presets
+
+# 删除 Provider
+aisw provider delete deepseek
+```
+
+### Profile 管理
+
+```bash
+# 列出所有 Profile
+aisw profile list
+
+# 创建 Profile（将 deepseek provider 绑定到 claude agent）
+aisw profile add claude-deepseek \
+  --name "Claude + DeepSeek" \
+  --agent claude \
+  --provider deepseek \
+  --default
+```
+
+### 配置导入/导出
+
+```bash
+# 导出当前配置到 TOML 文件
+aisw config export --path ~/.innate-aiswitcher/config.toml
+
+# 导出（包含 API Key）
+aisw config export --path config.toml --include-secrets
+
+# 从文件导入配置
+aisw config import --path config.toml
+```
+
+### 测试与启动
+
+```bash
+# 测试 Provider 连接
+aisw test provider deepseek
+
+# 列出 Provider 可用模型
+aisw test models deepseek
+
+# 用指定 Provider 启动 Agent
+aisw start claude deepseek
+```
+
+### 更多帮助
+
+```bash
+aisw --help
+aisw provider --help
+aisw serve --help
+```
+
+---
+
+## 数据存储
+
+所有配置数据存储在 **本地 SQLite 数据库** 中：
+
+```
+~/.innate-aiswitcher/pb_data/
+```
+
+Web UI 和 CLI 操作的是 **同一个数据库**，两者可以交替使用。
+
+### 数据备份
+
+```bash
+# 导出全量配置（含 API Key）
+aisw config export --include-secrets --path backup.toml
+
+# 导入时自动备份
+aisw config import --path backup.toml --backup
+```

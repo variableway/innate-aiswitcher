@@ -1,31 +1,90 @@
 # Taskfile for innate-aiswitcher.
 #
-# The repository contains several reference projects, so build/test tasks are
-# intentionally scoped to the current MVP packages.
+# 跨平台支持: macOS, Linux, Windows (PowerShell)
+# 需要: Go 1.26+, Task (https://taskfile.dev)
 #
-# Windows note: This Taskfile requires Git Bash or WSL to run. Commands like
-# mkdir -p, cp, and rm are not available in cmd.exe or PowerShell.
+# 快速开始:
+#   task build          # 构建二进制到 bin/ 目录
+#   task serve          # 启动 API 服务器 + Web UI
+#   task run            # 启动交互式 TUI
+#   task dev            # 构建并启动服务器
 
 version: "3"
 
 vars:
   BIN_DIR: bin
   BINARY: aisw
-  BINARY_EXT:
-    sh: 'if [ "$(go env GOOS)" = "windows" ]; then echo ".exe"; fi'
+  BIN_EXT: '{{if eq OS "windows"}}.exe{{end}}'
   CLI_PKG: ./cmd/aisw
-  PKGS: ". ./cmd/aisw ./cmd/mock-provider ./internal/... ./migrations"
-  SMOKE_DIR: /tmp/aisw-task-smoke
-  SMOKE_TEMPLATE: /tmp/aisw-task-template.toml
-  SMOKE_BACKUP: /tmp/aisw-task-backup.toml
-  SMOKE_HTTP_ADDR: 127.0.0.1:18990
+  PKGS: "./cmd/aisw ./cmd/mock-provider ./internal/... ./migrations"
   HTTP_ADDR: 127.0.0.1:8090
 
 tasks:
   default:
-    desc: Run the standard verification pipeline
+    desc: Show available tasks
     cmds:
-      - task: verify
+      - task --list
+
+  # ── Build & Install ──────────────────────────────────────
+
+  build:
+    desc: Build the aisw binary to bin/aisw (current OS)
+    cmds:
+      - go build -o "{{.BIN_DIR}}/{{.BINARY}}{{.BIN_EXT}}" {{.CLI_PKG}}
+    generates:
+      - "{{.BIN_DIR}}/{{.BINARY}}"
+
+  build:windows:
+    desc: Cross-compile for Windows amd64
+    cmds:
+      - go build -o "{{.BIN_DIR}}/{{.BINARY}}_windows_amd64.exe" {{.CLI_PKG}}
+    env:
+      GOOS: windows
+      GOARCH: amd64
+
+  build:linux:
+    desc: Cross-compile for Linux amd64
+    cmds:
+      - go build -o "{{.BIN_DIR}}/{{.BINARY}}_linux_amd64" {{.CLI_PKG}}
+    env:
+      GOOS: linux
+      GOARCH: amd64
+
+  install:
+    desc: Build and copy binary to ~/.local/bin
+    deps:
+      - build
+    cmds:
+      - cmd: pwsh -Command "New-Item -ItemType Directory -Force -Path $env:USERPROFILE\.local\bin | Out-Null; Copy-Item '{{.BIN_DIR}}\{{.BINARY}}{{.BIN_EXT}}' $env:USERPROFILE\.local\bin\ -Force"
+        platforms: [windows]
+      - cmd: mkdir -p ~/.local/bin && cp "{{.BIN_DIR}}/{{.BINARY}}" ~/.local/bin/
+        platforms: [linux, darwin]
+
+  # ── Run & Serve ──────────────────────────────────────────
+
+  dev:
+    desc: Build then start server (one-stop)
+    deps:
+      - build
+    cmds:
+      - '{{.BIN_DIR}}/{{.BINARY}}{{.BIN_EXT}} serve --http {{.HTTP_ADDR}}'
+
+  serve:
+    desc: Start API server + Web UI at http://{{.HTTP_ADDR}}
+    cmds:
+      - go run {{.CLI_PKG}} serve --http {{.HTTP_ADDR}}
+
+  serve:verbose:
+    desc: Start server with full PocketBase startup banner
+    cmds:
+      - go run {{.CLI_PKG}} serve --http {{.HTTP_ADDR}} --show-admin-banner
+
+  run:
+    desc: Launch the interactive TUI
+    cmds:
+      - go run {{.CLI_PKG}} {{.CLI_ARGS}}
+
+  # ── Quality ──────────────────────────────────────────────
 
   fmt:
     desc: Format Go source files
@@ -33,91 +92,45 @@ tasks:
       - gofmt -w main.go cmd/aisw internal migrations
 
   test:
-    desc: Run unit tests for current MVP packages
+    desc: Run unit tests
     cmds:
       - go test {{.PKGS}}
 
-  build:
-    desc: Build the aisw CLI binary for the current host OS
-    deps:
-      - fmt
+  vet:
+    desc: Run go vet
     cmds:
-      - mkdir -p {{.BIN_DIR}}
-      - go build -o {{.BIN_DIR}}/{{.BINARY}}{{.BINARY_EXT}} {{.CLI_PKG}}
-
-  build:windows:
-    desc: Cross-compile the aisw CLI binary for Windows (amd64)
-    deps:
-      - fmt
-    cmds:
-      - mkdir -p {{.BIN_DIR}}
-      - GOOS=windows GOARCH=amd64 go build -o {{.BIN_DIR}}/{{.BINARY}}_windows_amd64.exe {{.CLI_PKG}}
-
-  install:
-    desc: Build and install aisw to ~/.local/bin
-    deps:
-      - build
-    cmds:
-      - mkdir -p ~/.local/bin
-      - cp {{.BIN_DIR}}/{{.BINARY}}{{.BINARY_EXT}} ~/.local/bin/{{.BINARY}}{{.BINARY_EXT}}
+      - go vet {{.PKGS}}
 
   compile:
-    desc: Compile all current MVP packages
+    desc: Compile all packages (check for build errors)
     cmds:
       - go build {{.PKGS}}
 
   verify:
-    desc: Format, test, build, and verify modules
+    desc: Format, vet, test, and build
     cmds:
       - task: fmt
+      - task: vet
       - task: test
-      - task: compile
       - task: build
       - go mod verify
 
-  smoke:
-    desc: Run a local CLI smoke test with a temporary PocketBase data dir
-    cmds:
-      - rm -rf {{.SMOKE_DIR}}
-      - rm -f {{.SMOKE_TEMPLATE}} {{.SMOKE_BACKUP}}
-      - go run {{.CLI_PKG}} config template --path {{.SMOKE_TEMPLATE}}
-      - go run {{.CLI_PKG}} --dir {{.SMOKE_DIR}} config import --path {{.SMOKE_TEMPLATE}} --backup-path {{.SMOKE_BACKUP}}
-      - go run {{.CLI_PKG}} --dir {{.SMOKE_DIR}} provider presets
-      - go run {{.CLI_PKG}} --dir {{.SMOKE_DIR}} provider add local --base-url http://{{.SMOKE_HTTP_ADDR}}/v1 --api-key sk-task-smoke --protocol openai_chat --model gpt-task --endpoint chat_completions=/chat/completions --endpoint models=/models
-      - |
-        go run ./cmd/mock-provider --http {{.SMOKE_HTTP_ADDR}} &
-        server_pid=$!
-        trap 'kill ${server_pid} 2>/dev/null || true' EXIT
-        ready=0
-        for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50; do
-          if curl -fsS http://{{.SMOKE_HTTP_ADDR}}/health >/dev/null 2>&1; then
-            ready=1
-            break
-          fi
-          sleep 0.2
-        done
-        if [ "$ready" != "1" ]; then
-          echo "mock provider failed to start at {{.SMOKE_HTTP_ADDR}}"
-          exit 1
-        fi
-        go run {{.CLI_PKG}} --dir {{.SMOKE_DIR}} test provider local
-        go run {{.CLI_PKG}} --dir {{.SMOKE_DIR}} test models local
-      - go run {{.CLI_PKG}} --dir {{.SMOKE_DIR}} profile add codex-local --agent codex --provider local --model gpt-task
-      - go run {{.CLI_PKG}} --dir {{.SMOKE_DIR}} start codex codex-local --dry-run
-      - go run {{.CLI_PKG}} --dir {{.SMOKE_DIR}} config export --path /tmp/aisw-task-smoke.toml --include-secrets
-      - rm -rf {{.SMOKE_DIR}}
+  # ── Data ─────────────────────────────────────────────────
 
-  run:
-    desc: Run the interactive CLI/TUI
+  sync-db:
+    desc: Copy repo data.db to ~/.innate-aiswitcher/pb_data/
     cmds:
-      - go run {{.CLI_PKG}}
+      - cmd: pwsh -NoProfile -File scripts/sync-data-db.ps1
+        platforms: [windows]
+      - cmd: bash scripts/sync-data-db.sh
+        platforms: [linux, darwin]
 
-  serve:
-    desc: Start PocketBase server for REST/API development
-    cmds:
-      - go run {{.CLI_PKG}} serve --http {{.HTTP_ADDR}}
+  # ── Cleanup ──────────────────────────────────────────────
 
   clean:
-    desc: Remove local build artifacts
+    desc: Remove build artifacts
     cmds:
-      - rm -rf {{.BIN_DIR}}
+      - cmd: pwsh -Command "Remove-Item -Recurse -Force bin\ -ErrorAction SilentlyContinue"
+        platforms: [windows]
+      - cmd: rm -rf bin
+        platforms: [linux, darwin]

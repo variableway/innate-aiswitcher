@@ -26,15 +26,17 @@ import (
 	"github.com/variableway/innate-aiswitcher/internal/store"
 	"github.com/variableway/innate-aiswitcher/internal/templates"
 	"github.com/variableway/innate-aiswitcher/internal/tui"
+	"github.com/variableway/innate-aiswitcher/internal/webui"
 )
 
 var defaultAdminUIDistFS = ui.DistDirFS
 
 type Options struct {
-	DataDir         string
-	EnableAdminUI   bool
-	ShowAdminBanner bool
-	InitConfig      string
+	DataDir           string
+	EnableAdminUI     bool
+	ShowAdminBanner   bool
+	DisableAccessLog  bool
+	InitConfig        string
 }
 
 type PBGetter func() (*pocketbase.PocketBase, error)
@@ -176,6 +178,7 @@ func registerRoutes(pb *pocketbase.PocketBase, opts Options) {
 			if !opts.ShowAdminBanner {
 				e.InstallerFunc = nil
 			}
+			registerAccessLog(e, !opts.DisableAccessLog)
 			e.Router.GET("/api/aisw/health", func(e *core.RequestEvent) error {
 				return e.JSON(http.StatusOK, map[string]any{"ok": true, "service": "innate-aiswitcher"})
 			})
@@ -188,43 +191,262 @@ func registerRoutes(pb *pocketbase.PocketBase, opts Options) {
 				}
 				return e.JSON(http.StatusOK, map[string]any{"agents": agents, "providers": providers})
 			})
-			e.Router.GET("/api/aisw/providers/{slug}/models", func(e *core.RequestEvent) error {
-				s := store.New(pb)
-				provider, err := s.GetProvider(e.Request.PathValue("slug"))
-				if err != nil || provider == nil {
-					return e.JSON(http.StatusNotFound, map[string]any{"ok": false, "message": "provider not found"})
-				}
-				result, err := httpcheck.ListModels(e.Request.Context(), nil, *provider)
-				status := http.StatusOK
-				if err != nil || !result.OK {
-					status = http.StatusBadGateway
-				}
-				return e.JSON(status, result)
-			})
-			e.Router.POST("/api/aisw/providers/{slug}/test", func(e *core.RequestEvent) error {
-				s := store.New(pb)
-				provider, err := s.GetProvider(e.Request.PathValue("slug"))
-				if err != nil || provider == nil {
-					return e.JSON(http.StatusNotFound, map[string]any{"ok": false, "message": "provider not found"})
-				}
 
-				var payload struct {
-					Model string `json:"model"`
-				}
-				if e.Request.Body != nil {
-					_ = json.NewDecoder(e.Request.Body).Decode(&payload)
-				}
+			// Provider CRUD
+			registerProviderRoutes(e, pb)
+			// Profile CRUD
+			registerProfileRoutes(e, pb)
+			// Agents (read-only)
+			registerAgentRoutes(e, pb)
+			// Presets
+			registerPresetRoutes(e, pb)
 
-				result, err := httpcheck.CheckProvider(e.Request.Context(), nil, *provider, payload.Model)
-				status := http.StatusOK
-				if err != nil || !result.OK {
-					status = http.StatusBadGateway
-				}
-				return e.JSON(status, result)
-			})
+			// Serve the web configuration UI
+			webHandler, err := webui.Handler()
+			if err == nil {
+				e.Router.GET("/{$}", func(ev *core.RequestEvent) error {
+					webHandler.(http.Handler).ServeHTTP(ev.Response, ev.Request)
+					return nil
+				})
+				e.Router.GET("/style.css", func(ev *core.RequestEvent) error {
+					webHandler.(http.Handler).ServeHTTP(ev.Response, ev.Request)
+					return nil
+				})
+				e.Router.GET("/app.js", func(ev *core.RequestEvent) error {
+					webHandler.(http.Handler).ServeHTTP(ev.Response, ev.Request)
+					return nil
+				})
+			}
+
 			return e.Next()
 		},
 	})
+}
+
+func registerProviderRoutes(e *core.ServeEvent, pb *pocketbase.PocketBase) {
+	// List all providers (API key masked)
+	e.Router.GET("/api/aisw/providers", func(ev *core.RequestEvent) error {
+		s := store.New(pb)
+		providers, err := s.ListProviders()
+		if err != nil {
+			return ev.JSON(http.StatusInternalServerError, map[string]any{"ok": false, "message": err.Error()})
+		}
+		for i := range providers {
+			providers[i].APIKey = maskAPIKey(providers[i].APIKey)
+		}
+		return ev.JSON(http.StatusOK, providers)
+	})
+
+	// Get single provider
+	e.Router.GET("/api/aisw/providers/{slug}", func(ev *core.RequestEvent) error {
+		s := store.New(pb)
+		provider, err := s.GetProvider(ev.Request.PathValue("slug"))
+		if err != nil || provider == nil {
+			return ev.JSON(http.StatusNotFound, map[string]any{"ok": false, "message": "provider not found"})
+		}
+		provider.APIKey = maskAPIKey(provider.APIKey)
+		return ev.JSON(http.StatusOK, provider)
+	})
+
+	// Create provider
+	e.Router.POST("/api/aisw/providers", func(ev *core.RequestEvent) error {
+		var input store.Provider
+		if err := json.NewDecoder(ev.Request.Body).Decode(&input); err != nil {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": "invalid JSON: " + err.Error()})
+		}
+		s := store.New(pb)
+		provider, err := s.UpsertProvider(input)
+		if err != nil {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": err.Error()})
+		}
+		provider.APIKey = maskAPIKey(provider.APIKey)
+		return ev.JSON(http.StatusCreated, provider)
+	})
+
+	// Update provider
+	e.Router.PUT("/api/aisw/providers/{slug}", func(ev *core.RequestEvent) error {
+		var input store.Provider
+		if err := json.NewDecoder(ev.Request.Body).Decode(&input); err != nil {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": "invalid JSON: " + err.Error()})
+		}
+		input.Slug = ev.Request.PathValue("slug")
+		s := store.New(pb)
+		if input.APIKey == "" {
+			existing, _ := s.GetProvider(input.Slug)
+			if existing != nil {
+				input.APIKey = existing.APIKey
+			}
+		}
+		provider, err := s.UpsertProvider(input)
+		if err != nil {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": err.Error()})
+		}
+		provider.APIKey = maskAPIKey(provider.APIKey)
+		return ev.JSON(http.StatusOK, provider)
+	})
+
+	// Delete provider
+	e.Router.DELETE("/api/aisw/providers/{slug}", func(ev *core.RequestEvent) error {
+		s := store.New(pb)
+		if err := s.DeleteProvider(ev.Request.PathValue("slug")); err != nil {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": err.Error()})
+		}
+		return ev.JSON(http.StatusOK, map[string]any{"ok": true})
+	})
+
+	// List provider models
+	e.Router.GET("/api/aisw/providers/{slug}/models", func(ev *core.RequestEvent) error {
+		s := store.New(pb)
+		provider, err := s.GetProvider(ev.Request.PathValue("slug"))
+		if err != nil || provider == nil {
+			return ev.JSON(http.StatusNotFound, map[string]any{"ok": false, "message": "provider not found"})
+		}
+		result, err2 := httpcheck.ListModels(ev.Request.Context(), nil, *provider)
+		status := http.StatusOK
+		if err2 != nil || !result.OK {
+			status = http.StatusBadGateway
+		}
+		return ev.JSON(status, result)
+	})
+
+	// Test provider connectivity
+	e.Router.POST("/api/aisw/providers/{slug}/test", func(ev *core.RequestEvent) error {
+		s := store.New(pb)
+		provider, err := s.GetProvider(ev.Request.PathValue("slug"))
+		if err != nil || provider == nil {
+			return ev.JSON(http.StatusNotFound, map[string]any{"ok": false, "message": "provider not found"})
+		}
+		var payload struct {
+			Model string `json:"model"`
+		}
+		if ev.Request.Body != nil {
+			_ = json.NewDecoder(ev.Request.Body).Decode(&payload)
+		}
+		result, err2 := httpcheck.CheckProvider(ev.Request.Context(), nil, *provider, payload.Model)
+		status := http.StatusOK
+		if err2 != nil || !result.OK {
+			status = http.StatusBadGateway
+		}
+		return ev.JSON(status, result)
+	})
+}
+
+func registerProfileRoutes(e *core.ServeEvent, pb *pocketbase.PocketBase) {
+	// List all profiles
+	e.Router.GET("/api/aisw/profiles", func(ev *core.RequestEvent) error {
+		s := store.New(pb)
+		profiles, err := s.ListProfiles()
+		if err != nil {
+			return ev.JSON(http.StatusInternalServerError, map[string]any{"ok": false, "message": err.Error()})
+		}
+		return ev.JSON(http.StatusOK, profiles)
+	})
+
+	// Create profile
+	e.Router.POST("/api/aisw/profiles", func(ev *core.RequestEvent) error {
+		var input store.Profile
+		if err := json.NewDecoder(ev.Request.Body).Decode(&input); err != nil {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": "invalid JSON: " + err.Error()})
+		}
+		s := store.New(pb)
+		profile, err := s.UpsertProfile(input)
+		if err != nil {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": err.Error()})
+		}
+		return ev.JSON(http.StatusCreated, profile)
+	})
+
+	// Update profile
+	e.Router.PUT("/api/aisw/profiles/{slug}", func(ev *core.RequestEvent) error {
+		var input store.Profile
+		if err := json.NewDecoder(ev.Request.Body).Decode(&input); err != nil {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": "invalid JSON: " + err.Error()})
+		}
+		input.Slug = ev.Request.PathValue("slug")
+		s := store.New(pb)
+		profile, err := s.UpsertProfile(input)
+		if err != nil {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": err.Error()})
+		}
+		return ev.JSON(http.StatusOK, profile)
+	})
+
+	// Delete profile
+	e.Router.DELETE("/api/aisw/profiles/{slug}", func(ev *core.RequestEvent) error {
+		s := store.New(pb)
+		if err := s.DeleteProfile(ev.Request.PathValue("slug")); err != nil {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": err.Error()})
+		}
+		return ev.JSON(http.StatusOK, map[string]any{"ok": true})
+	})
+}
+
+func registerAgentRoutes(e *core.ServeEvent, pb *pocketbase.PocketBase) {
+	e.Router.GET("/api/aisw/agents", func(ev *core.RequestEvent) error {
+		s := store.New(pb)
+		agents, err := s.ListAgents()
+		if err != nil {
+			return ev.JSON(http.StatusInternalServerError, map[string]any{"ok": false, "message": err.Error()})
+		}
+		return ev.JSON(http.StatusOK, agents)
+	})
+}
+
+func registerPresetRoutes(e *core.ServeEvent, pb *pocketbase.PocketBase) {
+	// List provider presets
+	e.Router.GET("/api/aisw/presets", func(ev *core.RequestEvent) error {
+		presets, err := templates.ProviderPresets()
+		if err != nil {
+			return ev.JSON(http.StatusInternalServerError, map[string]any{"ok": false, "message": err.Error()})
+		}
+		return ev.JSON(http.StatusOK, presets)
+	})
+
+	// Create provider from preset
+	e.Router.POST("/api/aisw/providers/from-preset", func(ev *core.RequestEvent) error {
+		var payload struct {
+			PresetSlug string `json:"preset_slug"`
+			OptionSlug string `json:"option_slug"`
+			APIKey     string `json:"api_key"`
+		}
+		if err := json.NewDecoder(ev.Request.Body).Decode(&payload); err != nil {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": "invalid JSON: " + err.Error()})
+		}
+		preset, err := templates.FindPreset(payload.PresetSlug)
+		if err != nil {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": err.Error()})
+		}
+		var option templates.URLOption
+		found := false
+		for _, opt := range preset.URLOptions {
+			if opt.Slug == payload.OptionSlug {
+				option = opt
+				found = true
+				break
+			}
+		}
+		if !found {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": "option not found: " + payload.OptionSlug})
+		}
+		provider := templates.ProviderFromPreset(*preset, option, payload.APIKey)
+		s := store.New(pb)
+		result, err := s.UpsertProvider(provider)
+		if err != nil {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": err.Error()})
+		}
+		result.APIKey = maskAPIKey(result.APIKey)
+		return ev.JSON(http.StatusCreated, result)
+	})
+}
+
+func maskAPIKey(key string) string {
+	if key == "" {
+		return ""
+	}
+	if len(key) <= 8 {
+		return strings.Repeat("*", len(key))
+	}
+	return key[:4] + strings.Repeat("*", len(key)-8) + key[len(key)-4:]
 }
 
 func providerCommand(getPB PBGetter) *cobra.Command {
@@ -702,6 +924,7 @@ func serveCommand(getPB PBGetter, opts *Options) *cobra.Command {
 	var allowedOrigins []string
 	var httpAddr string
 	var httpsAddr string
+	var quiet bool
 	cmd := &cobra.Command{
 		Use:          "serve [domain(s)]",
 		Args:         cobra.ArbitraryArgs,
@@ -719,14 +942,18 @@ func serveCommand(getPB PBGetter, opts *Options) *cobra.Command {
 				httpAddr = "127.0.0.1:8090"
 			}
 
+			opts.DisableAccessLog = quiet
+			logServeStartup(opts.DataDir, httpAddr)
+
 			pb, err := getPB()
 			if err != nil {
 				return err
 			}
+			logServeReady(httpAddr)
 			err = apis.Serve(pb, apis.ServeConfig{
 				HttpAddr:           httpAddr,
 				HttpsAddr:          httpsAddr,
-				ShowStartBanner:    opts.ShowAdminBanner,
+				ShowStartBanner:    true,
 				AllowedOrigins:     allowedOrigins,
 				CertificateDomains: args,
 			})
@@ -736,6 +963,7 @@ func serveCommand(getPB PBGetter, opts *Options) *cobra.Command {
 			return err
 		},
 	}
+	cmd.Flags().BoolVar(&quiet, "quiet", false, "disable HTTP access logs")
 	cmd.PersistentFlags().StringSliceVar(&allowedOrigins, "origins", []string{"*"}, "CORS allowed domain origins list")
 	cmd.PersistentFlags().StringVar(&httpAddr, "http", "", "TCP address to listen for HTTP")
 	cmd.PersistentFlags().StringVar(&httpsAddr, "https", "", "TCP address to listen for HTTPS")
