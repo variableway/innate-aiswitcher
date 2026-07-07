@@ -66,7 +66,7 @@
 # 1. 添加 Provider（Anthropic 兼容模式）
 ./bin/aisw provider add minimax-claude \
   --name "MiniMax (Claude-compatible)" \
-  --base-url https://api.minimax.chat/anthropic \
+  --base-url https://api.minimaxi.com/anthropic \
   --api-key-env MINIMAX_API_KEY \
   --protocol anthropic \
   --model MiniMax-M3 \
@@ -93,6 +93,8 @@
 ./bin/aisw start claude claude-minimax
 ```
 
+> **快速路径**：如果不想手动配置 Provider，可以从内置预设导入 —— `./bin/aisw provider presets` 列出预设，然后用 TUI / Web UI / `POST /api/aisw/providers/from-preset` 一键导入 `minimax-claude`。
+
 ### 启动原理
 
 Claude Adapter 生成临时 `settings.json`：
@@ -101,18 +103,21 @@ Claude Adapter 生成临时 `settings.json`：
   "env": {
     "ANTHROPIC_AUTH_TOKEN": "<api-key>",
     "ANTHROPIC_API_KEY": "<api-key>",
-    "ANTHROPIC_BASE_URL": "https://api.minimax.chat/anthropic",
+    "ANTHROPIC_BASE_URL": "https://api.minimaxi.com/anthropic",
     "ANTHROPIC_MODEL": "MiniMax-M3",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "MiniMax-M3",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "MiniMax-M3",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "MiniMax-M3"
-  }
+  },
+  "skipDangerousModePermissionPrompt": true
 }
 ```
 
+`skipDangerousModePermissionPrompt` 始终为 `true`，跳过 Claude Code 自带的「enable dangerous mode?」UI 弹窗（实际权限由 `--dangerously-skip-permissions` 控制，由 `applySkipPermissions` 根据 `agent.skip_permissions_arg` / `profile.skip_permissions` 决定）。
+
 启动命令：
 ```bash
-claude --settings /tmp/aisw-claude-xxx.json
+claude --settings /tmp/aisw-claude-xxx.json [--dangerously-skip-permissions] [...]
 ```
 
 ---
@@ -126,14 +131,14 @@ claude --settings /tmp/aisw-claude-xxx.json
 ### 配置步骤
 
 ```bash
-# 1. 添加 Provider（OpenAI 兼容模式）
+# 1. 添加 Provider（OpenAI Responses 兼容模式）
 ./bin/aisw provider add minimax-codex \
   --name "MiniMax (Codex-compatible)" \
-  --base-url https://api.minimax.chat/v1 \
+  --base-url https://api.minimaxi.com/v1 \
   --api-key-env MINIMAX_API_KEY \
-  --protocol openai_chat \
+  --protocol openai_responses \
   --model MiniMax-M3 \
-  --endpoint chat_completions=/chat/completions \
+  --endpoint responses=/responses \
   --endpoint models=/models
 
 # 2. 测试连通性
@@ -153,9 +158,31 @@ claude --settings /tmp/aisw-claude-xxx.json
 ./bin/aisw start codex codex-minimax
 ```
 
+> **快速路径**：MiniMax 内置预设 `minimax-codex` 已经把 `capabilities.codex_auth_mode = "experimental_bearer_token"` 配好，从预设导入即可。
+
 ### 启动原理
 
-Codex Adapter 创建临时目录 `CODEX_HOME`：
+Codex Adapter 创建临时目录 `CODEX_HOME`，并按 `capabilities.codex_auth_mode` 选择认证方式：
+
+- **默认（`requires_openai_auth`）**：把 key 写入 `auth.json`
+- **`experimental_bearer_token`**：把 key 直接嵌入 `config.toml` 的 `experimental_bearer_token` 字段（适合 MiniMax / Xiaomi 等不支持标准 OpenAI OAuth 的网关）
+
+`experimental_bearer_token` 模式生成的 `config.toml`：
+
+```toml
+model = "MiniMax-M3"
+model_provider = "minimax-codex"
+model_context_window = 512000
+
+[model_providers.minimax-codex]
+name = "minimax-codex"
+base_url = "https://api.minimaxi.com/v1"
+experimental_bearer_token = "<api-key>"
+wire_api = "responses"
+```
+
+默认模式生成的 `config.toml` + `auth.json`：
+
 ```toml
 # CODEX_HOME/config.toml
 model_provider = "minimax-codex"
@@ -163,7 +190,7 @@ model = "MiniMax-M3"
 
 [model_providers.minimax-codex]
 name = "minimax-codex"
-base_url = "https://api.minimax.chat/v1"
+base_url = "https://api.minimaxi.com/v1"
 wire_api = "chat"
 requires_openai_auth = true
 ```
@@ -190,9 +217,9 @@ CODEX_HOME=/tmp/aisw-codex-xxx codex
 
 ```bash
 # 1. 添加 Provider（OpenAI 兼容模式）
-./bin/aisw provider add minimax-opencode \
-  --name "MiniMax (OpenCode-compatible)" \
-  --base-url https://api.minimax.chat/v1 \
+./bin/aisw provider add minimax-openai \
+  --name "MiniMax (OpenAI-compatible)" \
+  --base-url https://api.minimaxi.com/v1 \
   --api-key-env MINIMAX_API_KEY \
   --protocol openai_chat \
   --model MiniMax-M3 \
@@ -200,12 +227,12 @@ CODEX_HOME=/tmp/aisw-codex-xxx codex
   --endpoint models=/models
 
 # 2. 测试连通性
-./bin/aisw test provider minimax-opencode
+./bin/aisw test provider minimax-openai
 
 # 3. 创建 Profile
 ./bin/aisw profile add opencode-minimax \
   --agent opencode \
-  --provider minimax-opencode \
+  --provider minimax-openai \
   --model MiniMax-M3 \
   --default
 
@@ -216,17 +243,19 @@ CODEX_HOME=/tmp/aisw-codex-xxx codex
 ./bin/aisw start opencode opencode-minimax
 ```
 
+> OpenCode / Kimi / Trae / Hermes / OpenClaw 都使用同一个 `openai_env` Adapter（仅 `OPENAI_API_KEY` + `OPENAI_BASE_URL`），把 `--agent` 换成 `kimi`、`trae`、`hermes`、`openclaw` 即可复用同一份 Provider。
+
 ### 启动原理
 
 OpenCode 使用 `openai_env` Adapter，设置环境变量：
 ```bash
 OPENAI_API_KEY=<api-key>
-OPENAI_BASE_URL=https://api.minimax.chat/v1
+OPENAI_BASE_URL=https://api.minimaxi.com/v1
 ```
 
 启动命令：
 ```bash
-OPENAI_API_KEY=<api-key> OPENAI_BASE_URL=https://api.minimax.chat/v1 opencode
+OPENAI_API_KEY=<api-key> OPENAI_BASE_URL=https://api.minimaxi.com/v1 opencode
 ```
 
 ---
@@ -242,11 +271,24 @@ cd ~/work-project
 
 # 文件内容
 # profile = "claude-minimax"
+# agent = "claude"   # 可选；与 start 时传入的 agent 不一致会报错
 
 # 进入目录直接启动
 cd ~/work-project
 ./bin/aisw start claude
 # 自动使用 claude-minimax
+```
+
+跳过项目配置：
+
+```bash
+./bin/aisw start claude --ignore-project
+```
+
+`.aiswrc` 也支持直接绑定 Provider：
+
+```toml
+provider = "minimax-claude"
 ```
 
 ---

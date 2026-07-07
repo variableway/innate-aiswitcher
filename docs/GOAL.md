@@ -19,23 +19,24 @@ Provider 与 Agent Adapter 解耦是合理且必要的：
 
 - PocketBase + SQLite 后台数据存储。
 - Collections: `providers`、`agents`、`profiles`、`bindings`、`launch_history`、`settings`。
-- Seed agents: Claude Code、Codex CLI、Gemini CLI、Kimi CLI、Trae CLI、OpenCode、Hermes、OpenClaw。
-- Provider catalog includes bundled presets with base URL、protocol、default model and endpoint overrides。
-- CLI commands: `provider`、`profile`、`start`、`test provider`、`test models`、`config template/import/export`。
-- TUI default entry for choosing Agent + Provider, testing Provider connectivity, and starting/dry-running a session。
+- Seed agents: Claude Code、Codex CLI、Gemini CLI、Kimi CLI、Trae CLI、OpenCode、Hermes、OpenClaw。Per-agent `skip_permissions_arg` / `skip_permissions_default` and per-profile `skip_permissions` override.
+- Provider catalog includes bundled presets with base URL、protocol、default model and endpoint overrides.
+- CLI commands: `provider`、`profile`、`start`、`test provider`、`test models`、`config template/import/export/dump`、`init` (project config)。
+- TUI default entry for choosing Agent + Provider, testing Provider connectivity, prefilling existing provider values when editing, and starting/dry-running a session.
 - Adapter projection:
-  - Claude: temporary settings JSON。
-  - Codex: temporary `CODEX_HOME` with `config.toml` and `auth.json`。
-  - Gemini/OpenAI-compatible tools: session environment variables。
-- API Key testing through OpenAI-compatible、OpenAI Responses and Anthropic-compatible minimal requests。
-- Basic model listing through provider `models` endpoint overrides/fallbacks。
-- Config export/template writes are atomic; config import is backed up by default and applied transactionally。
-- REST endpoints for health/catalog/provider test/model listing plus public read access to agent/provider/profile collections。
-- Embedded Web UI at `GET /` with Provider/Profile CRUD, preset import, and connectivity tests via `/api/aisw/*` write endpoints。
+  - Claude: temporary settings JSON (always sets `skipDangerousModePermissionPrompt=true`).
+  - Codex: temporary `CODEX_HOME` with `config.toml` and optional `auth.json`; supports `experimental_bearer_token` auth mode.
+  - Gemini/OpenAI-compatible tools: session environment variables.
+- API Key testing through OpenAI-compatible、OpenAI Responses and Anthropic-compatible minimal requests.
+- Basic model listing through provider `models` endpoint overrides/fallbacks.
+- Config export/template writes are atomic; config import is backed up by default and applied transactionally. TOML and JSON wire formats supported; format auto-detected on import.
+- REST endpoints for health/catalog/provider CRUD + ops/profile CRUD/agents/presets plus public read access to agent/provider/profile collections.
+- Embedded Web UI at `GET /` with Provider/Profile CRUD, preset import, and connectivity tests via `/api/aisw/*` write endpoints.
+- `.aiswrc` project config (`aisw init`) so `aisw start AGENT` auto-resolves a default profile/provider per directory (`--ignore-project` to skip).
 
 ## Implementation Plan For Next Iterations
 
-1. Add project/global bindings so `start AGENT` can infer a default Provider/Profile from current working directory beyond `.aiswrc`.
+1. Promote `.aiswrc` from file-based discovery to first-class `bindings` table rows (global/project/session scope), keeping file discovery as a fallback.
 2. Expand adapter fidelity for Trae/OpenCode once their exact CLI config expectations are confirmed.
 3. Add authentication when exposing write REST beyond localhost.
 4. Add launch history visualization in Web UI.

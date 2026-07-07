@@ -155,7 +155,7 @@ opencode --version
 
 # 添加一个 OpenAI-compatible Provider（例如 MiniMax）
 .\bin\aisw provider add minimax `
-  --base-url https://api.minimax.chat/v1 `
+  --base-url https://api.minimaxi.com/v1 `
   --api-key-env MINIMAX_API_KEY `
   --protocol openai_chat `
   --model MiniMax-M3

@@ -80,13 +80,21 @@ Current adapters:
   - Uses `claude --settings <temp-file>`.
 - `codex`
   - Writes a temporary `CODEX_HOME`.
-  - Generates `config.toml` and `auth.json` from the shared Provider.
+  - Generates `config.toml` (and optionally `auth.json`) from the shared Provider.
+  - Respects `capabilities.codex_auth_mode`:
+    - `requires_openai_auth` (default) → writes `auth.json` with `OPENAI_API_KEY`.
+    - `experimental_bearer_token` → embeds the key directly into `config.toml` (used by MiniMax / Xiaomi presets).
+  - `capabilities.codex_model_context_window` is appended to `config.toml` when set.
   - Does not mutate the user's real Codex config.
 - `gemini`
   - Uses session env: `GEMINI_API_KEY`, `GOOGLE_GEMINI_BASE_URL`.
 - `openai_env`
   - Uses session env: `OPENAI_API_KEY`, `OPENAI_BASE_URL`.
   - Used by Kimi, Trae, OpenCode, Hermes, OpenClaw until their exact adapter contracts are finalized.
+
+### 4.1 Agent Skip-Permissions
+
+`agents.skip_permissions_arg` (string, e.g. `--dangerously-skip-permissions` or `--yolo`) and `agents.skip_permissions_default` (bool) seed the agent. `profiles.skip_permissions` (`""` | `"true"` | `"false"`) overrides per profile. The Claude adapter always sets `skipDangerousModePermissionPrompt: true` in its temp settings so the UI confirmation is skipped; the actual permission gate is the CLI flag, applied by `applySkipPermissions` based on the resolved value above.
 
 ## 5. CLI Contract
 
@@ -142,12 +150,32 @@ Config mirror:
 aisw config template --path PATH
 aisw config export --path PATH
 aisw config export --path PATH --include-secrets
+aisw config export --path PATH --format toml|json
 aisw config import --path PATH
 aisw config import --path PATH --backup-path BACKUP_PATH
 aisw config import --path PATH --no-backup
+aisw config import --path PATH --format toml|json   # auto-detect by default
+aisw config dump [--path PATH] [--format toml|json]  # full dump with secrets to the init-config path
 ```
 
-`config import` must create a backup by default before applying imported providers/profiles. File writes must be atomic (`temp file + fsync + rename`), and imports must apply providers/profiles inside a SQLite transaction.
+`config import` must create a backup by default before applying imported providers/profiles. File writes must be atomic (`temp file + fsync + rename`), and imports must apply providers/profiles inside a SQLite transaction. Wire format defaults to TOML but JSON is supported for both `export` and `import` (auto-detected from the file extension or explicit `--format`).
+
+Project config:
+
+```bash
+aisw init --profile SLUG [--agent SLUG] [--provider SLUG] [--force]
+aisw start AGENT [SELECTOR] -- [native args] [--ignore-project] [--dry-run] [--cwd DIR] [--terminal current|ghostty|terminal]
+```
+
+`aisw init` writes a TOML `.aiswrc` (with `profile`/`agent`/`provider` keys) into the current directory. `aisw start` walks up from `$PWD` for `.aiswrc` and uses the bound `profile` or `provider` unless `--ignore-project` is set. If `.aiswrc.agent` is set and conflicts with the requested agent, startup is rejected.
+
+First-run init:
+
+```bash
+aisw --init-config PATH serve   # on empty DB, import this TOML before serving
+```
+
+When PocketBase bootstraps against an empty database, `aisw` looks up the file at `configfile.InitConfigPath()` (default `~/.innate-aiswitcher/init-config.toml`, override via `--init-config`) and imports it. If the path does not exist and `--init-config` was not passed, the bootstrap is a no-op.
 
 ## 5.1 TUI Contract
 
@@ -215,6 +243,7 @@ Custom write endpoints are unauthenticated and intended for localhost use only.
 - Served at `GET /` (plus `/style.css`, `/app.js`).
 - Uses `/api/aisw/*` for Provider/Profile CRUD, preset import, and connectivity tests.
 - Shares the same PocketBase SQLite database as the CLI.
+- Features: Providers (list / add / edit / delete / preset import / Test), Profiles (list / add / edit / delete / default toggle / per-profile model & CLI args override).
 
 ### 6.3 PocketBase Collection REST
 
@@ -246,20 +275,28 @@ Tasks:
 
 - `task build`
   - Formats source and builds `bin/aisw` from `./cmd/aisw`.
+- `task build:windows`, `task build:linux`
+  - Cross-compile for the given OS/arch into `bin/aisw_<os>_<arch>[.exe]`.
+- `task install`
+  - Builds and copies `bin/aisw` to `~/.local/bin`.
 - `task test`
   - Runs scoped tests: `go test . ./cmd/aisw ./cmd/mock-provider ./internal/... ./migrations`.
+- `task vet`
+  - Runs `go vet` over the same scoped package set.
 - `task compile`
   - Compiles scoped packages: `go build . ./cmd/aisw ./cmd/mock-provider ./internal/... ./migrations`.
 - `task verify`
   - Runs format, vet, test, build, and `go mod verify`.
 - `task smoke`
-  - Uses a temporary PocketBase data dir and local mock provider to test provider add, provider API test, model listing, profile add, dry-run launch, and config export.
+  - Uses a temporary PocketBase data dir and local mock provider to run the full `config template` → `config import` → `provider presets` → `provider add` → `test provider` → `test models` → `profile add` → `start --dry-run` → `config export --include-secrets` flow.
 - `task serve`
   - Starts REST API + embedded Web UI at `http://127.0.0.1:8090/`.
 - `task serve:verbose`
   - Same as `serve` but passes `--show-admin-banner`.
 - `task dev`
   - Builds binary then runs `serve`.
+- `task run`
+  - Launches the interactive TUI (`go run ./cmd/aisw`).
 - `task docs:dev`
   - Starts the docmd dev server for the documentation site.
 - `task docs:build`
@@ -289,7 +326,7 @@ Expected coverage:
 
 ## 9. Future Work
 
-1. Add project/global default binding resolution beyond `.aiswrc`.
+1. Add global/project/session binding tables on top of `.aiswrc` (`bindings` collection is already in place; resolution logic still lives in code).
 2. Add exact Trae/OpenCode adapters after confirming their current CLI contracts.
 3. Add authentication for write REST when exposing beyond localhost.
 4. Expand provider preset catalog and model discovery beyond the current smoke-tested MVP.

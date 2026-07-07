@@ -36,8 +36,18 @@ This guide is for contributors working on `innate-aiswitcher`.
 # Build the CLI binary
 task build
 
+# Cross-compile for a single target
+task build:windows
+task build:linux
+
+# Build then install to ~/.local/bin
+task install
+
 # Format code
 task fmt
+
+# Run go vet
+task vet
 
 # Compile all packages
 task compile
@@ -99,7 +109,7 @@ func buildMyAgentPlan(ctx BuildContext) (LaunchPlan, func(), error) {
 }
 ```
 
-2. Register it in the `builders` map:
+2. Register it in the `builders` map (or call `adapter.Register("my_agent", buildMyAgentPlan)`):
 
 ```go
 var builders = map[string]Builder{
@@ -108,9 +118,9 @@ var builders = map[string]Builder{
 }
 ```
 
-3. Add a unit test in `internal/adapter/adapter_test.go`.
+3. Add a unit test in `internal/adapter/adapter_test.go` (use `t.TempDir()` for any filesystem side effects; the existing tests use `--dry-run` plans).
 
-4. Add the agent seed in migrations (or ensure `agents` collection has the entry).
+4. Add the agent seed in a migration. For new collections follow `migrations/1780565700_init_aisw.go`; for upserting into an existing collection use the `FindFirstRecordByFilter` pattern in `migrations/1780992004_add_skip_permissions_to_agents.go` or `migrations/1780567400_seed_hermes_openclaw_agents.go`.
 
 ## Adding a New Provider Preset
 

@@ -155,7 +155,38 @@ aisw config export --path config.toml --include-secrets
 
 # 从文件导入配置
 aisw config import --path config.toml
+
+# 导入时跳过自动备份
+aisw config import --path config.toml --no-backup
+
+# 导入为 JSON（TOML/JSON 自动按内容检测，也可显式指定）
+aisw config import --path config.json --format json
 ```
+
+`config import` 默认先导出包含 secrets 的备份到 `~/.innate-aiswitcher/`（通过 `--backup-path` 自定义），导入在 SQLite transaction 内执行，失败会回滚。
+
+### 从环境变量读取 API Key
+
+```bash
+aisw provider add minimax-openai \
+  --base-url https://api.minimaxi.com/v1 \
+  --api-key-env MINIMAX_API_KEY \
+  --protocol openai_chat \
+  --model MiniMax-M3
+```
+
+`--api-key-env` 在 `provider add` 时读取环境变量并写入 hidden PocketBase 字段。
+
+### 项目级默认（.aiswrc）
+
+为不同目录绑定默认 Profile / Provider / Agent：
+
+```bash
+cd ~/work-project
+aisw init --profile codex-minimax --agent codex
+```
+
+之后在该目录下执行 `aisw start codex` 会自动用 `codex-minimax`。`aisw init --provider minimax-claude` 也可只绑定 Provider。`--force` 覆盖已有 `.aiswrc`。用 `aisw start codex --ignore-project` 跳过项目配置。
 
 ### 测试与启动
 
@@ -176,6 +207,8 @@ aisw start claude deepseek
 aisw --help
 aisw provider --help
 aisw serve --help
+aisw config --help
+aisw init --help
 ```
 
 ---
@@ -196,6 +229,12 @@ Web UI 和 CLI 操作的是 **同一个数据库**，两者可以交替使用。
 # 导出全量配置（含 API Key）
 aisw config export --include-secrets --path backup.toml
 
-# 导入时自动备份
-aisw config import --path backup.toml --backup
+# 导入时自动备份（默认开启）
+aisw config import --path backup.toml
+
+# 关闭自动备份
+aisw config import --path backup.toml --no-backup
+
+# 完整 dump（含 secrets）到默认 init-config 路径
+aisw config dump
 ```

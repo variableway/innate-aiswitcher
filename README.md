@@ -21,11 +21,15 @@
 推荐用 Task 管理构建和验证：
 
 ```bash
-task build      # build bin/aisw
-task test       # run scoped unit tests
-task verify     # fmt + test + compile + build + go mod verify
-task smoke      # run a local CLI smoke test
-task serve      # start REST API + embedded Web UI
+task build       # build bin/aisw
+task test        # run scoped unit tests
+task verify      # fmt + vet + test + build + go mod verify
+task smoke       # run a local CLI smoke test (mock provider)
+task serve       # start REST API + embedded Web UI
+task run         # launch the interactive TUI
+task install     # build + copy bin/aisw to ~/.local/bin
+task docs:dev    # docmd dev server for the documentation site
+task docs:build  # build static docs to site/
 ```
 
 也可以直接使用 Go 命令运行 CLI，CLI 主入口位于 `cmd/aisw`。
@@ -41,13 +45,29 @@ go run ./cmd/aisw
 添加共享 Provider：
 
 ```bash
-go run ./cmd/aisw provider add minimax \
-  --base-url https://api.minimax.chat/v1 \
+go run ./cmd/aisw provider add minimax-openai \
+  --base-url https://api.minimaxi.com/v1 \
   --api-key-env MINIMAX_API_KEY \
   --protocol openai_chat \
   --model MiniMax-M3 \
   --endpoint chat_completions=/chat/completions \
   --endpoint models=/models
+```
+
+从内置预设一键导入（CLI / TUI / Web UI 都支持）：
+
+```bash
+go run ./cmd/aisw provider presets                          # 列出全部预设和 URL 选项
+go run ./cmd/aisw provider add minimax-claude \
+  --from-preset minimax --option claude --api-key-env MINIMAX_API_KEY
+```
+
+为当前项目创建 `.aiswrc`（之后 `aisw start` 自动套用）：
+
+```bash
+go run ./cmd/aisw init --profile codex-minimax --agent codex
+# 跳过 .aiswrc
+go run ./cmd/aisw start codex --ignore-project
 ```
 
 查看内置 Provider 模板：
@@ -67,7 +87,7 @@ go run ./cmd/aisw config template --path ~/.innate-aiswitcher/config.toml
 ```bash
 go run ./cmd/aisw profile add codex-minimax \
   --agent codex \
-  --provider minimax \
+  --provider minimax-codex \
   --model MiniMax-M3
 ```
 
@@ -75,14 +95,16 @@ go run ./cmd/aisw profile add codex-minimax \
 
 ```bash
 go run ./cmd/aisw start codex codex-minimax
-go run ./cmd/aisw start claude minimax --dry-run
+go run ./cmd/aisw start claude minimax-claude --dry-run
 ```
 
 测试 Provider API Key：
 
 ```bash
-go run ./cmd/aisw test provider minimax
-go run ./cmd/aisw test models minimax
+go run ./cmd/aisw test provider minimax-openai
+go run ./cmd/aisw test models minimax-openai
+# 覆盖模型：
+go run ./cmd/aisw test provider minimax-openai --model MiniMax-M3
 ```
 
 导出/导入共享配置：
@@ -187,7 +209,7 @@ task verify
 task smoke
 ```
 
-`task smoke` 会启动本地 mock provider，并执行 provider request test 与 model listing test。
+`task smoke` 会启动本地 mock provider，并执行 `config template` → `config import` → `provider presets` → `provider add` → `test provider` → `test models` → `profile add` → `start --dry-run` → `config export --include-secrets` 的端到端流程。
 
 仓库里还有用于参考的外部项目/示例目录，其中部分 Go 示例缺自己的依赖，因此 `go test ./...`、`go build ./...`、`go mod tidy` 会被那些参考目录影响。当前项目包请使用 `Taskfile.yml` 中的 scoped 任务。
 

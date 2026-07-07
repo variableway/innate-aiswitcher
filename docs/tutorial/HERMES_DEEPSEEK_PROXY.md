@@ -172,16 +172,16 @@ aisw provider add deepseek \
 ```bash
 # MiniMax OpenAI-compatible（供 Codex/OpenCode/Hermes 使用）
 aisw provider add minimax-openai \
-  --base-url https://api.minimax.chat/v1 \
+  --base-url https://api.minimaxi.com/v1 \
   --api-key-env MINIMAX_API_KEY \
   --protocol openai_chat \
-  --model MiniMax-M1 \
+  --model MiniMax-M3 \
   --endpoint chat_completions=/chat/completions \
   --endpoint models=/models
 
 # MiniMax Claude-compatible（供 Claude Code 使用）
 aisw provider add minimax-claude \
-  --base-url https://api.minimax.chat/anthropic \
+  --base-url https://api.minimaxi.com/anthropic \
   --api-key-env MINIMAX_API_KEY \
   --protocol anthropic \
   --model claude-3-5-sonnet-20241022 \
@@ -229,7 +229,7 @@ aisw profile add hermes-deepseek \
 aisw profile add hermes-minimax \
   --agent hermes \
   --provider minimax-openai \
-  --model MiniMax-M1
+  --model MiniMax-M3
 
 # Hermes + Kimi（备用代理）
 aisw profile add hermes-kimi \
@@ -263,7 +263,7 @@ aisw profile add claude-kimi \
 aisw profile add codex-minimax \
   --agent codex \
   --provider minimax-openai \
-  --model MiniMax-M1
+  --model MiniMax-M3
 
 # Codex + Kimi
 aisw profile add codex-kimi \
@@ -281,7 +281,7 @@ aisw profile add codex-deepseek \
 aisw profile add opencode-minimax \
   --agent opencode \
   --provider minimax-openai \
-  --model MiniMax-M1
+  --model MiniMax-M3
 
 # OpenCode + DeepSeek
 aisw profile add opencode-deepseek \
@@ -547,15 +547,15 @@ aisw provider add deepseek \
 if [ -n "$MINIMAX_API_KEY" ]; then
   echo "[2/6] 添加 MiniMax Provider..."
   aisw provider add minimax-openai \
-    --base-url https://api.minimax.chat/v1 \
+    --base-url https://api.minimaxi.com/v1 \
     --api-key-env MINIMAX_API_KEY \
     --protocol openai_chat \
-    --model MiniMax-M1 \
+    --model MiniMax-M3 \
     --endpoint chat_completions=/chat/completions \
     --endpoint models=/models
 
   aisw provider add minimax-claude \
-    --base-url https://api.minimax.chat/anthropic \
+    --base-url https://api.minimaxi.com/anthropic \
     --api-key-env MINIMAX_API_KEY \
     --protocol anthropic \
     --model claude-3-5-sonnet-20241022 \
@@ -608,7 +608,7 @@ echo "[6/6] 创建本地 Agent Profile..."
   --agent claude --provider minimax-claude --model claude-3-5-sonnet-20241022
 
 [ -n "$MINIMAX_API_KEY" ] && aisw profile add codex-minimax \
-  --agent codex --provider minimax-openai --model MiniMax-M1
+  --agent codex --provider minimax-openai --model MiniMax-M3
 
 [ -n "$KIMI_API_KEY" ] && aisw profile add claude-kimi \
   --agent claude --provider kimi-claude --model claude-3-5-sonnet-20241022

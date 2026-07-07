@@ -7,18 +7,18 @@ version = 1
 [[providers]]
 slug = "minimax-openai"
 name = "MiniMax OpenAI Compatible"
-base_url = "https://api.minimax.chat/v1"
+base_url = "https://api.minimaxi.com/v1"
 api_protocol = "openai_chat"
-default_model = "MiniMax-M1"
+default_model = "MiniMax-M3"
 endpoints = { chat_completions = "/chat/completions", models = "/models" }
 active = true
 
 [[providers]]
 slug = "minimax-claude"
 name = "MiniMax Claude Code Compatible"
-base_url = "https://api.minimax.chat/anthropic"
+base_url = "https://api.minimaxi.com/anthropic"
 api_protocol = "anthropic"
-default_model = "claude-3-5-sonnet-20241022"
+default_model = "MiniMax-M3"
 endpoints = { messages = "/v1/messages", models = "/v1/models" }
 active = true
 
@@ -36,7 +36,7 @@ slug = "codex-minimax"
 name = "Codex with MiniMax"
 agent = "codex"
 provider = "minimax-openai"
-model = "MiniMax-M1"
+model = "MiniMax-M3"
 is_default = false
 
 [[profiles]]
@@ -44,7 +44,7 @@ slug = "claude-minimax"
 name = "Claude Code with MiniMax"
 agent = "claude"
 provider = "minimax-claude"
-model = "claude-3-5-sonnet-20241022"
+model = "MiniMax-M3"
 is_default = false
 
 [[profiles]]

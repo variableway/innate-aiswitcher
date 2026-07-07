@@ -134,7 +134,7 @@ claude --version
 ```bash
 # 添加 Provider
 aisw provider add minimax-claude \
-  --base-url https://api.minimax.chat/anthropic \
+  --base-url https://api.minimaxi.com/anthropic \
   --api-key-env MINIMAX_API_KEY \
   --protocol anthropic \
   --model claude-3-5-sonnet-20241022 \
@@ -180,10 +180,10 @@ codex --version
 ```bash
 # 添加 Provider
 aisw provider add minimax-openai \
-  --base-url https://api.minimax.chat/v1 \
+  --base-url https://api.minimaxi.com/v1 \
   --api-key-env MINIMAX_API_KEY \
   --protocol openai_chat \
-  --model MiniMax-M1 \
+  --model MiniMax-M3 \
   --endpoint chat_completions=/chat/completions \
   --endpoint models=/models
 
@@ -191,7 +191,7 @@ aisw provider add minimax-openai \
 aisw profile add codex-minimax \
   --agent codex \
   --provider minimax-openai \
-  --model MiniMax-M1
+  --model MiniMax-M3
 
 # 启动
 aisw start codex codex-minimax
@@ -417,16 +417,16 @@ aisw start opencode opencode-deepseek
 ```bash
 # 添加 MiniMax OpenAI-compatible（供 Codex/Hermes/OpenCode/Kimi 使用）
 aisw provider add minimax-openai \
-  --base-url https://api.minimax.chat/v1 \
+  --base-url https://api.minimaxi.com/v1 \
   --api-key-env MINIMAX_API_KEY \
   --protocol openai_chat \
-  --model MiniMax-M1 \
+  --model MiniMax-M3 \
   --endpoint chat_completions=/chat/completions \
   --endpoint models=/models
 
 # 添加 MiniMax Claude-compatible（供 Claude Code 使用）
 aisw provider add minimax-claude \
-  --base-url https://api.minimax.chat/anthropic \
+  --base-url https://api.minimaxi.com/anthropic \
   --api-key-env MINIMAX_API_KEY \
   --protocol anthropic \
   --model claude-3-5-sonnet-20241022 \
@@ -434,10 +434,10 @@ aisw provider add minimax-claude \
   --endpoint models=/v1/models
 
 # 与所有 Agent 组合
-aisw profile add hermes-minimax --agent hermes --provider minimax-openai --model MiniMax-M1
-aisw profile add codex-minimax --agent codex --provider minimax-openai --model MiniMax-M1
+aisw profile add hermes-minimax --agent hermes --provider minimax-openai --model MiniMax-M3
+aisw profile add codex-minimax --agent codex --provider minimax-openai --model MiniMax-M3
 aisw profile add claude-minimax --agent claude --provider minimax-claude --model claude-3-5-sonnet-20241022
-aisw profile add opencode-minimax --agent opencode --provider minimax-openai --model MiniMax-M1
+aisw profile add opencode-minimax --agent opencode --provider minimax-openai --model MiniMax-M3
 
 # 启动
 aisw start hermes hermes-minimax
