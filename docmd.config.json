@@ -28,7 +28,7 @@
     }
   },
   "theme": {
-    "name": "summer"
+    "name": "sky"
   },
   "minify": true,
   "autoTitleFromH1": true,
