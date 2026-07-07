@@ -17,8 +17,10 @@ This guide is for contributors working on `innate-aiswitcher`.
 │   ├── templates/     # Embedded config/preset templates
 │   ├── tui/           # Interactive terminal UI
 │   └── webui/         # Embedded Web UI (static HTML/CSS/JS via go:embed)
+├── docs/              # Markdown 文档源（docmd 发布到 GitHub Pages）
+├── docmd.config.json  # docmd 站点配置（summer 模板）
+├── package.json       # docmd 依赖与 npm scripts
 ├── migrations/        # PocketBase collection migrations
-├── docs/              # Documentation
 └── Taskfile.yml       # Build tasks
 ```
 
@@ -26,6 +28,7 @@ This guide is for contributors working on `innate-aiswitcher`.
 
 - Go 1.26+
 - [Task](https://taskfile.dev/) (optional but recommended)
+- Node.js 18+ (only for building/previewing the documentation site)
 
 ## Build
 
@@ -156,9 +159,28 @@ Enable the PocketBase admin UI (separate from the AISwitcher Web UI):
 go run ./cmd/aisw --admin-ui serve --http 127.0.0.1:8090
 ```
 
-Use `--quiet` on `serve` to suppress HTTP access logs. API reference: [API.md](API.md).
+Use `--quiet` on `serve` to suppress HTTP access logs. API reference: [REST API](/API).
+
+## Documentation Site (docmd)
+
+User-facing docs are built with [docmd](https://docs.docmd.io/) from the `docs/` folder and published to GitHub Pages on every push to `main`.
+
+| URL | Purpose |
+| --- | --- |
+| https://variableway.github.io/innate-aiswitcher/ | Production docs site |
+| `http://localhost:3000` | Local preview (`npm run dev`) |
+
+```bash
+npm install          # first time only
+task docs:dev        # hot-reload dev server
+task docs:build      # output static site to site/
+```
+
+Configuration lives in `docmd.config.json` (summer template, navigation, `base: /innate-aiswitcher/`). Deployment workflow: `.github/workflows/docs.yml`.
+
+**One-time GitHub setup:** Settings → Pages → Source → **GitHub Actions**.
 
 ---
 
-For usage examples, see [USAGE.md](USAGE.md).  
-For architecture details, see [SPEC.md](SPEC.md).
+For usage examples, see [Usage Guide](/USAGE).  
+For architecture details, see [Architecture](/SPEC).

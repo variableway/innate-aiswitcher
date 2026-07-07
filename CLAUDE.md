@@ -23,6 +23,8 @@ task run         # go run ./cmd/aisw — launches the TUI
 task install     # build + cp bin/aisw to ~/.local/bin
 task clean       # rm -rf bin
 task fmt         # gofmt -w main.go cmd/aisw internal migrations
+task docs:dev    # docmd dev server for documentation site
+task docs:build  # build static docs to site/
 ```
 
 To run a single test: `go test ./internal/adapter -run TestBuildClaudePlan` (still scoped to one of the package roots listed in `Taskfile.yml`'s `PKGS` var, not `./...`).
@@ -124,7 +126,8 @@ Standard PocketBase collection reads: `GET /api/collections/{agents|providers|pr
 
 ## More
 
-- Architecture spec: `docs/SPEC.md`
+- Architecture spec: `docs/SPEC.md` — also at https://variableway.github.io/innate-aiswitcher/SPEC/
 - REST reference: `docs/API.md`
 - Per-agent testing walkthroughs: `docs/AGENT_TESTING.md`
 - User-facing CLI recipes: `README.md`, `docs/USAGE.md`
+- Published docs site: https://variableway.github.io/innate-aiswitcher/ (docmd, `task docs:dev` to preview)

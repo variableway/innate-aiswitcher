@@ -1,5 +1,7 @@
 # AISwitcher 使用指南
 
+> 在线文档：[variableway.github.io/innate-aiswitcher](https://variableway.github.io/innate-aiswitcher/)
+
 ## 前置要求
 
 - **Go 1.26+**
@@ -82,6 +84,8 @@ task dev
 | `task test` | 运行单元测试 |
 | `task verify` | 格式化 + 检查 + 测试 + 构建 |
 | `task clean` | 清理构建产物 |
+| `task docs:dev` | 启动 docmd 文档站本地预览 |
+| `task docs:build` | 构建静态文档到 `site/` |
 
 ---
 
@@ -99,7 +103,7 @@ task dev
 - 设置默认 Profile
 - 覆盖模型选择、CLI 参数、权限设置
 
-REST API 完整参考见 [API.md](API.md)。
+REST API 完整参考见 [REST API](/API)。
 
 ---
 

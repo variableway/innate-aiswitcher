@@ -1,0 +1,67 @@
+{
+  "title": "AISwitcher",
+  "url": "https://variableway.github.io/innate-aiswitcher",
+  "base": "/innate-aiswitcher/",
+  "src": "docs",
+  "out": "site",
+  "engine": "js",
+  "layout": {
+    "spa": true,
+    "header": {
+      "enabled": true
+    },
+    "sidebar": {
+      "collapsible": true,
+      "defaultCollapsed": false
+    },
+    "optionsMenu": {
+      "position": "header",
+      "components": {
+        "search": true,
+        "themeSwitch": true
+      }
+    },
+    "footer": {
+      "style": "minimal",
+      "content": "© 2026 innate-aiswitcher",
+      "branding": true
+    }
+  },
+  "theme": {
+    "name": "summer"
+  },
+  "minify": true,
+  "autoTitleFromH1": true,
+  "copyCode": true,
+  "pageNavigation": true,
+  "navigation": [
+    { "title": "Home", "path": "/", "icon": "home" },
+    { "title": "Usage Guide", "path": "/USAGE", "icon": "book-open" },
+    { "title": "REST API", "path": "/API", "icon": "plug" },
+    { "title": "Architecture", "path": "/SPEC", "icon": "layers" },
+    { "title": "Goals", "path": "/GOAL", "icon": "target" },
+    { "title": "Development", "path": "/DEVELOPMENT", "icon": "code" },
+    { "title": "Agent Testing", "path": "/AGENT_TESTING", "icon": "flask-conical" },
+    {
+      "title": "Tutorials",
+      "icon": "graduation-cap",
+      "collapsible": true,
+      "children": [
+        { "title": "Install Guide", "path": "/tutorial/INSTALL_GUIDE" },
+        { "title": "Hermes + DeepSeek Proxy", "path": "/tutorial/HERMES_DEEPSEEK_PROXY" }
+      ]
+    },
+    { "title": "GitHub", "path": "https://github.com/variableway/innate-aiswitcher", "icon": "github", "external": true },
+    { "title": "Releases", "path": "https://github.com/variableway/innate-aiswitcher/releases", "icon": "package", "external": true }
+  ],
+  "plugins": {
+    "git": {
+      "commitHistory": true,
+      "maxCommits": 5
+    },
+    "seo": {
+      "defaultDescription": "Local LLM Provider switcher for AI coding agents — CLI, Web UI, and REST API."
+    },
+    "sitemap": {}
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "innate-aiswitcher-docs",
+  "private": true,
+  "description": "Documentation site for innate-aiswitcher (docmd)",
+  "scripts": {
+    "dev": "docmd dev",
+    "build": "docmd build",
+    "preview": "docmd build && npx serve site"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/variableway/innate-aiswitcher.git"
+  },
+  "homepage": "https://variableway.github.io/innate-aiswitcher/",
+  "devDependencies": {
+    "@docmd/core": "^0.8.9",
+    "@docmd/template-summer": "^0.8.9"
+  }
+}

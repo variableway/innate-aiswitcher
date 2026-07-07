@@ -260,8 +260,14 @@ Tasks:
   - Same as `serve` but passes `--show-admin-banner`.
 - `task dev`
   - Builds binary then runs `serve`.
+- `task docs:dev`
+  - Starts the docmd dev server for the documentation site.
+- `task docs:build`
+  - Builds the static documentation site to `site/` (published via GitHub Actions).
 - `task clean`
   - Removes local build artifacts.
+
+Documentation site: https://variableway.github.io/innate-aiswitcher/ (source: `docs/`, config: `docmd.config.json`, deploy: `.github/workflows/docs.yml`).
 
 Do not use `go test ./...` as the primary verification command until reference projects are moved outside the root Go module or isolated with their own modules/build tags.
 

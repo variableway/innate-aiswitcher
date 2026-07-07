@@ -6,6 +6,8 @@
 # 快速开始:
 #   task build          # 构建二进制到 bin/ 目录
 #   task serve          # 启动 API 服务器 + Web UI
+#   task docs:dev       # 启动 docmd 文档站本地预览
+#   task docs:build     # 构建静态文档到 site/
 #   task run            # 启动交互式 TUI
 #   task dev            # 构建并启动服务器
 
@@ -134,3 +136,15 @@ tasks:
         platforms: [windows]
       - cmd: rm -rf bin
         platforms: [linux, darwin]
+
+  # ── Documentation (docmd) ────────────────────────────────
+
+  docs:dev:
+    desc: Start docmd dev server for documentation site
+    cmds:
+      - npm run dev
+
+  docs:build:
+    desc: Build static documentation site to site/
+    cmds:
+      - npm run build

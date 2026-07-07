@@ -2,6 +2,8 @@
 
 `innate-aiswitcher` 是一个本地 LLM Provider 切换器，用 Go + PocketBase 管理 SQLite 数据，并在启动 Claude Code、Codex CLI、Gemini CLI、Trae CLI、OpenCode 等 Agent session 时选择本次使用的 Provider/Profile。
 
+📖 **Documentation:** [variableway.github.io/innate-aiswitcher](https://variableway.github.io/innate-aiswitcher/)
+
 核心目标是避免 cc-switch 当前“每个 App 一个 ProviderManager”的重复模型：Provider 是全局共享实体，Agent Adapter 只负责把同一个 Provider 投影成不同 Agent 需要的临时配置或环境变量。
 
 ## 架构目标
@@ -189,6 +191,6 @@ task smoke
 
 仓库里还有用于参考的外部项目/示例目录，其中部分 Go 示例缺自己的依赖，因此 `go test ./...`、`go build ./...`、`go mod tidy` 会被那些参考目录影响。当前项目包请使用 `Taskfile.yml` 中的 scoped 任务。
 
-完整规格见 [docs/SPEC.md](docs/SPEC.md)。使用指南见 [docs/USAGE.md](docs/USAGE.md)。
+完整规格见 [docs/SPEC.md](docs/SPEC.md)（[在线版](https://variableway.github.io/innate-aiswitcher/SPEC/)）。使用指南见 [docs/USAGE.md](docs/USAGE.md)（[在线版](https://variableway.github.io/innate-aiswitcher/USAGE/)）。
 
 各 Agent（Claude Code、Codex CLI、OpenCode 等）的详细测试指南见 [docs/AGENT_TESTING.md](docs/AGENT_TESTING.md)。

@@ -58,3 +58,7 @@ temp/
 
 # Task / Build cache
 .task/
+
+# docmd documentation site
+/node_modules/
+/site/

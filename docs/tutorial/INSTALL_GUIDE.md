@@ -535,7 +535,7 @@ aisw start codex codex-xiaomi
 
 ### 2.5e 防封代理模式（Hermes + DeepSeek 调度其他 Agent）
 
-> 详细指南见 [HERMES_DEEPSEEK_PROXY.md](HERMES_DEEPSEEK_PROXY.md)
+> 详细指南见 [Hermes + DeepSeek Proxy](/tutorial/HERMES_DEEPSEEK_PROXY)
 
 **核心思路**: 使用 Hermes + DeepSeek 作为唯一对外出口，其他 Agent 完全本地运行，避免直接暴露原始 Provider。
 
