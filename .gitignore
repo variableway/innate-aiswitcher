@@ -62,3 +62,10 @@ temp/
 # docmd documentation site
 /node_modules/
 /site/
+
+# Web frontend (Vite build synced into internal/webui/dist for embedding)
+web/node_modules/
+web/dist/
+
+# GUI test evidence screenshots (session artifacts)
+gui-test-screenshots/
