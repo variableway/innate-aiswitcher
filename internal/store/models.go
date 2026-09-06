@@ -2,19 +2,44 @@ package store
 
 import "encoding/json"
 
-type Provider struct {
-	ID           string                 `json:"id" toml:"-"`
-	Slug         string                 `json:"slug" toml:"slug"`
-	Name         string                 `json:"name" toml:"name"`
+// ProviderVariant is a protocol-specific endpoint configuration of a vendor
+// provider. A vendor (e.g. MiniMax) stores one API key and one variant per
+// wire protocol it serves; agents resolve the variant matching their adapter.
+type ProviderVariant struct {
 	BaseURL      string                 `json:"base_url" toml:"base_url"`
-	APIKey       string                 `json:"api_key,omitempty" toml:"api_key,omitempty"`
-	APIProtocol  string                 `json:"api_protocol" toml:"api_protocol"`
-	DefaultModel string                 `json:"default_model,omitempty" toml:"default_model,omitempty"`
-	Headers      map[string]string      `json:"headers,omitempty" toml:"headers,omitempty"`
 	Endpoints    map[string]string      `json:"endpoints,omitempty" toml:"endpoints,omitempty"`
 	Capabilities map[string]interface{} `json:"capabilities,omitempty" toml:"capabilities,omitempty"`
-	Notes        string                 `json:"notes,omitempty" toml:"notes,omitempty"`
-	Active       bool                   `json:"active" toml:"active"`
+}
+
+type Provider struct {
+	ID           string                     `json:"id" toml:"-"`
+	Slug         string                     `json:"slug" toml:"slug"`
+	Name         string                     `json:"name" toml:"name"`
+	BaseURL      string                     `json:"base_url" toml:"base_url"`
+	APIKey       string                     `json:"api_key,omitempty" toml:"api_key,omitempty"`
+	APIProtocol  string                     `json:"api_protocol" toml:"api_protocol"`
+	DefaultModel string                     `json:"default_model,omitempty" toml:"default_model,omitempty"`
+	Models       []string                   `json:"models,omitempty" toml:"models,omitempty"`
+	Variants     map[string]ProviderVariant `json:"variants,omitempty" toml:"variants,omitempty"`
+	Headers      map[string]string          `json:"headers,omitempty" toml:"headers,omitempty"`
+	Endpoints    map[string]string          `json:"endpoints,omitempty" toml:"endpoints,omitempty"`
+	Capabilities map[string]interface{}     `json:"capabilities,omitempty" toml:"capabilities,omitempty"`
+	Notes        string                     `json:"notes,omitempty" toml:"notes,omitempty"`
+	Active       bool                       `json:"active" toml:"active"`
+}
+
+// HasModel reports whether model is part of the provider's configured model
+// list. Providers without an explicit list accept any model string.
+func (p Provider) HasModel(model string) bool {
+	if len(p.Models) == 0 {
+		return true
+	}
+	for _, candidate := range p.Models {
+		if candidate == model {
+			return true
+		}
+	}
+	return false
 }
 
 type Agent struct {
@@ -73,6 +98,19 @@ func decodeJSONMap[T any](value any) T {
 	bytes, err := json.Marshal(value)
 	if err != nil {
 		return out
+	}
+	_ = json.Unmarshal(bytes, &out)
+	return out
+}
+
+func decodeJSONSlice[T any](value any) []T {
+	if value == nil {
+		return nil
+	}
+	var out []T
+	bytes, err := json.Marshal(value)
+	if err != nil {
+		return nil
 	}
 	_ = json.Unmarshal(bytes, &out)
 	return out

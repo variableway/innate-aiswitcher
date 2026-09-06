@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -10,42 +11,60 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/variableway/innate-aiswitcher/internal/adapter"
 	"github.com/variableway/innate-aiswitcher/internal/httpcheck"
+	"github.com/variableway/innate-aiswitcher/internal/providerconfig"
 	"github.com/variableway/innate-aiswitcher/internal/store"
 	"github.com/variableway/innate-aiswitcher/internal/templates"
 )
 
 func Run(s *store.Store) error {
-	providers, err := s.ListProviders()
-	if err != nil {
-		return err
-	}
-	if len(providers) == 0 {
-		fmt.Println("No providers configured. Let's add one from a bundled template.")
-		return configureProvider(s)
-	}
+	for {
+		providers, err := s.ListProviders()
+		if err != nil {
+			return err
+		}
+		if len(providers) == 0 {
+			fmt.Println("No providers configured. Let's add one from a bundled template.")
+			if err := configureProvider(s); err != nil {
+				if !errors.Is(err, huh.ErrUserAborted) {
+					fmt.Fprintf(os.Stderr, "configure: %v\n", err)
+				}
+				return nil
+			}
+			continue
+		}
 
-	action := "start"
-	if err := huh.NewForm(huh.NewGroup(
-		huh.NewSelect[string]().Title("Action").Options(
-			huh.NewOption("Start an agent session", "start"),
-			huh.NewOption("List providers", "list"),
-			huh.NewOption("Configure provider", "configure"),
-			huh.NewOption("Test provider", "test"),
-		).Value(&action),
-	)).Run(); err != nil {
-		return err
-	}
+		action := "start"
+		if err := huh.NewForm(huh.NewGroup(
+			huh.NewSelect[string]().Title("Action").Options(
+				huh.NewOption("Start an agent session", "start"),
+				huh.NewOption("List providers", "list"),
+				huh.NewOption("Configure provider", "configure"),
+				huh.NewOption("Test provider", "test"),
+				huh.NewOption("Quit", "quit"),
+			).Value(&action),
+		)).Run(); err != nil {
+			if errors.Is(err, huh.ErrUserAborted) {
+				return nil
+			}
+			return err
+		}
 
-	switch action {
-	case "list":
-		printProviders(providers)
-		return nil
-	case "configure":
-		return configureProvider(s)
-	case "test":
-		return testProvider(providers)
-	default:
-		return startSession(s, providers)
+		switch action {
+		case "quit":
+			return nil
+		case "list":
+			printProviders(providers)
+		case "configure":
+			if err := configureProvider(s); err != nil && !errors.Is(err, huh.ErrUserAborted) {
+				fmt.Fprintf(os.Stderr, "configure: %v\n", err)
+			}
+		case "test":
+			if err := testProvider(providers); err != nil && !errors.Is(err, huh.ErrUserAborted) {
+				fmt.Fprintf(os.Stderr, "test: %v\n", err)
+			}
+		default:
+			return startSession(s, providers)
+		}
 	}
 }
 
@@ -61,24 +80,27 @@ func startSession(s *store.Store, providers []store.Provider) error {
 			agentOptions = append(agentOptions, huh.NewOption(agent.Name+" ("+agent.Slug+")", agent.Slug))
 		}
 	}
+	var agentSlug string
+	if err := huh.NewForm(huh.NewGroup(
+		huh.NewSelect[string]().Title("Agent").Options(agentOptions...).Value(&agentSlug),
+	)).Run(); err != nil {
+		return err
+	}
+
+	// Only offer providers that can serve the chosen agent.
 	providerOptions := make([]huh.Option[string], 0, len(providers))
 	for _, provider := range providers {
-		if provider.Active {
+		if provider.Active && providerconfig.SupportsAgent(provider, agentAdapter(s, agentSlug)) {
 			providerOptions = append(providerOptions, huh.NewOption(providerSelectLabel(provider), provider.Slug))
 		}
 	}
-
-	var agentSlug string
+	if len(providerOptions) == 0 {
+		return fmt.Errorf("no active providers support agent %s; add one from a preset first", agentSlug)
+	}
 	var selector string
-	var dryRun = true
-	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewSelect[string]().Title("Agent").Options(agentOptions...).Value(&agentSlug),
-			huh.NewSelect[string]().Title("Provider").Options(providerOptions...).Value(&selector),
-			huh.NewConfirm().Title("Dry run only?").Affirmative("yes").Negative("start now").Value(&dryRun),
-		),
-	)
-	if err := form.Run(); err != nil {
+	if err := huh.NewForm(huh.NewGroup(
+		huh.NewSelect[string]().Title("Provider").Options(providerOptions...).Value(&selector),
+	)).Run(); err != nil {
 		return err
 	}
 
@@ -86,8 +108,36 @@ func startSession(s *store.Store, providers []store.Provider) error {
 	if err != nil {
 		return err
 	}
+
+	// Model choice: default plus every configured model (all share the key).
+	modelOverride := ""
+	if len(provider.Models) > 1 {
+		modelOptions := []huh.Option[string]{
+			huh.NewOption(fmt.Sprintf("default (%s)", provider.DefaultModel), ""),
+		}
+		for _, model := range provider.Models {
+			if model == provider.DefaultModel {
+				continue
+			}
+			modelOptions = append(modelOptions, huh.NewOption(model, model))
+		}
+		if err := huh.NewForm(huh.NewGroup(
+			huh.NewSelect[string]().Title("Model").Options(modelOptions...).Value(&modelOverride),
+		)).Run(); err != nil {
+			return err
+		}
+	}
+
+	dryRun := true
+	if err := huh.NewForm(huh.NewGroup(
+		huh.NewConfirm().Title("Dry run only?").Affirmative("yes").Negative("start now").Value(&dryRun),
+	)).Run(); err != nil {
+		return err
+	}
+
 	cwd, _ := os.Getwd()
-	plan, cleanup, err := adapter.BuildPlan(*agent, *provider, profile, adapter.LaunchOptions{CWD: cwd, Terminal: "current", DryRun: dryRun})
+	opts := adapter.LaunchOptions{CWD: cwd, Terminal: "current", DryRun: dryRun, Model: modelOverride}
+	plan, cleanup, err := adapter.BuildPlan(*agent, *provider, profile, opts)
 	if err != nil {
 		return err
 	}
@@ -99,7 +149,16 @@ func startSession(s *store.Store, providers []store.Provider) error {
 	if len(plan.Files) > 0 {
 		fmt.Printf("Temp files: %v\n", plan.Files)
 	}
-	return adapter.Execute(plan, func() {}, adapter.LaunchOptions{CWD: cwd, Terminal: "current", DryRun: dryRun})
+	return adapter.Execute(plan, func() {}, opts)
+}
+
+// agentAdapter maps an agent slug to its adapter name (claude/codex use
+// dedicated adapters; everything else speaks the openai env protocol).
+func agentAdapter(s *store.Store, slug string) string {
+	if agent, err := s.GetAgent(slug); err == nil && agent != nil {
+		return agent.Adapter
+	}
+	return "openai_env"
 }
 
 func configureProvider(s *store.Store) error {
@@ -130,48 +189,24 @@ func configureProvider(s *store.Store) error {
 			break
 		}
 	}
-	if preset.Slug == "" || len(preset.URLOptions) == 0 {
-		return fmt.Errorf("provider preset has no URL options: %s", presetSlug)
+	if preset.Slug == "" {
+		return fmt.Errorf("provider preset not found: %s", presetSlug)
 	}
 
-	optionSlug := preset.URLOptions[0].Slug
-	if len(preset.URLOptions) > 1 {
-		optionOptions := make([]huh.Option[string], 0, len(preset.URLOptions))
-		for _, option := range preset.URLOptions {
-			optionOptions = append(optionOptions, huh.NewOption(templates.OptionLabel(option), option.Slug))
-		}
-		if err := huh.NewForm(huh.NewGroup(
-			huh.NewSelect[string]().Title("URL format").Options(optionOptions...).Value(&optionSlug),
-		)).Run(); err != nil {
-			return err
-		}
-	}
-
-	var option templates.URLOption
-	for _, candidate := range preset.URLOptions {
-		if candidate.Slug == optionSlug {
-			option = candidate
-			break
-		}
-	}
-	if option.Slug == "" {
-		return fmt.Errorf("URL option not found: %s", optionSlug)
-	}
-
-	provider := templates.ProviderFromPreset(preset, option, "")
+	provider := templates.ProviderFromPreset(preset, "")
 
 	// Check if provider already exists in DB — prefill saved values
 	existing, _ := s.GetProvider(provider.Slug)
 	apiKey := ""
-	baseURL := provider.BaseURL
 	model := provider.DefaultModel
+	models := strings.Join(provider.Models, ", ")
 	slug := provider.Slug
 	name := provider.Name
-	keyDescription := "Leave empty to keep an existing saved key."
+	keyDescription := "One key serves claude code, codex and opencode."
 
 	if existing != nil {
-		baseURL = existing.BaseURL
 		model = existing.DefaultModel
+		models = strings.Join(existing.Models, ", ")
 		name = existing.Name
 		if existing.APIKey != "" {
 			keyDescription = "Key already saved. Leave empty to keep it, or enter a new one."
@@ -182,8 +217,8 @@ func configureProvider(s *store.Store) error {
 		huh.NewInput().Title("Provider slug").Value(&slug),
 		huh.NewInput().Title("Display name").Value(&name),
 		huh.NewInput().Title("API key").Description(keyDescription).EchoMode(huh.EchoModePassword).Value(&apiKey),
-		huh.NewInput().Title("Base URL").Value(&baseURL),
 		huh.NewInput().Title("Default model").Value(&model),
+		huh.NewInput().Title("Models").Description("Comma-separated; all models share the API key.").Value(&models),
 	)).Run(); err != nil {
 		return err
 	}
@@ -191,8 +226,11 @@ func configureProvider(s *store.Store) error {
 	provider.Slug = slug
 	provider.Name = name
 	provider.APIKey = strings.TrimSpace(apiKey)
-	provider.BaseURL = strings.TrimSpace(baseURL)
 	provider.DefaultModel = strings.TrimSpace(model)
+	provider.Models = splitModels(models)
+	if provider.DefaultModel == "" && len(provider.Models) > 0 {
+		provider.DefaultModel = provider.Models[0]
+	}
 	if provider.DefaultModel == "" {
 		return fmt.Errorf("default model is required for provider %s", provider.Slug)
 	}
@@ -200,7 +238,8 @@ func configureProvider(s *store.Store) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Saved provider %s (%s, model=%s)\n", saved.Slug, saved.BaseURL, saved.DefaultModel)
+	fmt.Printf("Saved provider %s (models: %s, endpoints: %s)\n",
+		saved.Slug, strings.Join(saved.Models, ", "), strings.Join(variantProtocols(*saved), ", "))
 
 	if saved.APIKey != "" {
 		var testNow bool
@@ -214,6 +253,34 @@ func configureProvider(s *store.Store) error {
 		}
 	}
 	return nil
+}
+
+func splitModels(value string) []string {
+	parts := strings.Split(value, ",")
+	models := make([]string, 0, len(parts))
+	seen := map[string]bool{}
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" || seen[part] {
+			continue
+		}
+		seen[part] = true
+		models = append(models, part)
+	}
+	return models
+}
+
+func variantProtocols(provider store.Provider) []string {
+	protocols := make([]string, 0, len(provider.Variants))
+	for _, protocol := range []string{"anthropic", "openai_responses", "openai_chat"} {
+		if _, ok := provider.Variants[protocol]; ok {
+			protocols = append(protocols, protocol)
+		}
+	}
+	if len(protocols) == 0 && provider.APIProtocol != "" {
+		protocols = append(protocols, provider.APIProtocol)
+	}
+	return protocols
 }
 
 func testProvider(providers []store.Provider) error {
@@ -242,7 +309,7 @@ func testProvider(providers []store.Provider) error {
 }
 
 func runProviderTest(provider store.Provider, model string) error {
-	result, err := httpcheck.CheckProvider(context.Background(), nil, provider, model)
+	result, err := httpcheck.CheckProvider(context.Background(), nil, providerconfig.ResolveDefault(provider), model)
 	fmt.Println(httpcheck.Format(result))
 	if err != nil {
 		return err
@@ -264,16 +331,18 @@ func providerSelectLabel(provider store.Provider) string {
 	if provider.APIKey != "" {
 		keyState = "key=set"
 	}
+	protocols := strings.Join(variantProtocols(provider), ",")
 	model := provider.DefaultModel
+	if len(provider.Models) > 0 {
+		model = strings.Join(provider.Models, ",")
+	}
 	if model == "" {
 		model = "model=missing"
-	} else {
-		model = "model=" + model
 	}
-	return fmt.Sprintf("%s | %s | %s | %s | %s | %s", provider.Slug, provider.Name, provider.APIProtocol, model, provider.BaseURL, keyState)
+	return fmt.Sprintf("%s | %s | %s | %s | key=%s", provider.Slug, provider.Name, protocols, model, keyState)
 }
 
-// PrintPresets renders provider presets with styled TUI output using lipgloss.
+// PrintPresets renders vendor provider presets with styled TUI output using lipgloss.
 func PrintPresets(presets []templates.ProviderPreset) {
 	// Styles
 	titleStyle := lipgloss.NewStyle().
@@ -299,16 +368,15 @@ func PrintPresets(presets []templates.ProviderPreset) {
 		Bold(true).
 		Foreground(lipgloss.Color("#FFD700"))
 
-	optionTitleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#FF8C00")).
-		MarginTop(1)
-
-	endpointStyle := lipgloss.NewStyle().
+	variantStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#98FB98"))
 
+	hintStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#808080")).
+		Italic(true)
+
 	// Title
-	fmt.Println(titleStyle.Render("📦 Built-in Provider Presets"))
+	fmt.Println(titleStyle.Render("📦 Built-in Provider Presets (one API key per vendor)"))
 	fmt.Println()
 
 	for _, preset := range presets {
@@ -324,57 +392,25 @@ func PrintPresets(presets []templates.ProviderPreset) {
 		)
 		presetContent.WriteString("\n")
 
-		// URL options
-		for i, option := range preset.URLOptions {
-			if len(preset.URLOptions) > 1 {
-				optionTitle := fmt.Sprintf("  option %d: %s", i+1, option.Label)
-				presetContent.WriteString(optionTitleStyle.Render(optionTitle))
-				presetContent.WriteString("\n")
-			}
+		// Models
+		presetContent.WriteString(
+			lipgloss.JoinHorizontal(lipgloss.Top,
+				labelStyle.Render("models"),
+				valueStyle.Render(strings.Join(preset.Models, ", ")),
+			),
+		)
+		presetContent.WriteString("\n")
 
-			provider := templates.ProviderFromPreset(preset, option, "")
-
-			// Protocol
-			presetContent.WriteString(
-				lipgloss.JoinHorizontal(lipgloss.Top,
-					labelStyle.Render("protocol"),
-					valueStyle.Render(provider.APIProtocol),
-				),
-			)
-			presetContent.WriteString("\n")
-
-			// Model
-			model := provider.DefaultModel
-			if model == "" {
-				model = "(none)"
-			}
-			presetContent.WriteString(
-				lipgloss.JoinHorizontal(lipgloss.Top,
-					labelStyle.Render("model"),
-					valueStyle.Render(model),
-				),
-			)
-			presetContent.WriteString("\n")
-
-			// Base URL
-			presetContent.WriteString(
-				lipgloss.JoinHorizontal(lipgloss.Top,
-					labelStyle.Render("base_url"),
-					valueStyle.Render(provider.BaseURL),
-				),
-			)
-			presetContent.WriteString("\n")
-
-			// Endpoints
-			if len(provider.Endpoints) > 0 {
-				var epParts []string
-				for k, v := range provider.Endpoints {
-					epParts = append(epParts, fmt.Sprintf("%s=%s", k, v))
+		// Per-protocol variants
+		for _, protocol := range templates.PresetProtocols(preset) {
+			for _, variant := range preset.Variants {
+				if variant.Protocol != protocol {
+					continue
 				}
 				presetContent.WriteString(
 					lipgloss.JoinHorizontal(lipgloss.Top,
-						labelStyle.Render("endpoints"),
-						endpointStyle.Render(strings.Join(epParts, ", ")),
+						labelStyle.Render(protocol),
+						variantStyle.Render(variant.BaseURL),
 					),
 				)
 				presetContent.WriteString("\n")
@@ -384,9 +420,5 @@ func PrintPresets(presets []templates.ProviderPreset) {
 		fmt.Println(presetBoxStyle.Render(presetContent.String()))
 	}
 
-	// Footer hint
-	hintStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#808080")).
-		Italic(true)
-	fmt.Println(hintStyle.Render(fmt.Sprintf("Total: %d preset(s)", len(presets))))
+	fmt.Println(hintStyle.Render(fmt.Sprintf("Total: %d preset(s) — add with: aisw provider from-preset <slug> --api-key <key>", len(presets))))
 }

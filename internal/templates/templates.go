@@ -20,20 +20,23 @@ import (
 //go:embed files/*
 var files embed.FS
 
+// ProviderPreset is a vendor-level preset: one API key plus per-protocol
+// endpoint variants and a model list. Projected via ProviderFromPreset it
+// becomes a single vendor provider row that serves every agent adapter.
 type ProviderPreset struct {
-	Slug       string      `toml:"slug"`
-	Name       string      `toml:"name"`
-	URLOptions []URLOption `toml:"url_options"`
+	Slug         string          `toml:"slug" json:"slug"`
+	Name         string          `toml:"name" json:"name"`
+	DefaultModel string          `toml:"default_model" json:"default_model"`
+	Models       []string        `toml:"models" json:"models"`
+	Variants     []PresetVariant `toml:"variants" json:"variants"`
 }
 
-type URLOption struct {
-	Slug         string                 `toml:"slug"`
-	Label        string                 `toml:"label"`
-	BaseURL      string                 `toml:"base_url"`
-	APIProtocol  string                 `toml:"api_protocol"`
-	DefaultModel string                 `toml:"default_model"`
-	Endpoints    map[string]string      `toml:"endpoints"`
-	Capabilities map[string]interface{} `toml:"capabilities"`
+// PresetVariant is one wire-protocol endpoint of a vendor preset.
+type PresetVariant struct {
+	Protocol     string                 `toml:"protocol" json:"protocol"`
+	BaseURL      string                 `toml:"base_url" json:"base_url"`
+	Endpoints    map[string]string      `toml:"endpoints" json:"endpoints"`
+	Capabilities map[string]interface{} `toml:"capabilities" json:"capabilities"`
 }
 
 type presetFile struct {
@@ -85,39 +88,82 @@ func FindPreset(slug string) (*ProviderPreset, error) {
 	return nil, fmt.Errorf("provider preset not found: %s", slug)
 }
 
-func ProviderFromPreset(preset ProviderPreset, option URLOption, apiKey string) store.Provider {
-	slug := preset.Slug
-	name := preset.Name
-	if len(preset.URLOptions) > 1 || option.Slug != preset.Slug {
-		slug = preset.Slug + "-" + option.Slug
-		name = preset.Name + " " + option.Label
+// ProviderFromPreset projects a vendor preset into a single provider row.
+// The returned provider carries one API key, the preset's model list, and a
+// variant per wire protocol — every agent resolves its own endpoint from it.
+func ProviderFromPreset(preset ProviderPreset, apiKey string) store.Provider {
+	defaultModel := preset.DefaultModel
+	if defaultModel == "" && len(preset.Models) > 0 {
+		defaultModel = preset.Models[0]
+	}
+	models := preset.Models
+	if len(models) == 0 && defaultModel != "" {
+		models = []string{defaultModel}
+	}
+	variants := make(map[string]store.ProviderVariant, len(preset.Variants))
+	for _, variant := range preset.Variants {
+		if variant.Protocol == "" || variant.BaseURL == "" {
+			continue
+		}
+		variants[variant.Protocol] = store.ProviderVariant{
+			BaseURL:      variant.BaseURL,
+			Endpoints:    variant.Endpoints,
+			Capabilities: variant.Capabilities,
+		}
 	}
 	return store.Provider{
-		Slug:         slug,
-		Name:         name,
-		BaseURL:      option.BaseURL,
+		Slug:         preset.Slug,
+		Name:         preset.Name,
 		APIKey:       apiKey,
-		APIProtocol:  option.APIProtocol,
-		DefaultModel: option.DefaultModel,
-		Endpoints:    option.Endpoints,
-		Capabilities: option.Capabilities,
+		DefaultModel: defaultModel,
+		Models:       models,
+		Variants:     variants,
 		Active:       true,
 	}
 }
 
+// PresetLabel renders a one-line summary: vendor name, served protocols, and
+// available models.
 func PresetLabel(preset ProviderPreset) string {
-	choices := make([]string, 0, len(preset.URLOptions))
-	for _, option := range preset.URLOptions {
-		choices = append(choices, option.Label)
+	parts := []string{preset.Name + " ["}
+	parts = append(parts, strings.Join(PresetProtocols(preset), ", "))
+	parts = append(parts, "]")
+	if len(preset.Models) > 0 {
+		parts = append(parts, " models: "+strings.Join(preset.Models, ", "))
 	}
-	if len(choices) == 0 {
-		return preset.Name + " (no URL options)"
-	}
-	return preset.Name + " (" + strings.Join(choices, ", ") + ")"
+	return strings.Join(parts, "")
 }
 
-func OptionLabel(option URLOption) string {
-	return fmt.Sprintf("%s - %s - %s", option.Label, option.APIProtocol, option.BaseURL)
+// PresetProtocols lists the wire protocols a preset serves, in the canonical
+// anthropic / openai_responses / openai_chat order when present.
+func PresetProtocols(preset ProviderPreset) []string {
+	seen := map[string]bool{}
+	for _, variant := range preset.Variants {
+		if variant.Protocol != "" {
+			seen[variant.Protocol] = true
+		}
+	}
+	protocols := make([]string, 0, len(seen))
+	for _, protocol := range []string{"anthropic", "openai_responses", "openai_chat"} {
+		if seen[protocol] {
+			protocols = append(protocols, protocol)
+		}
+	}
+	for protocol := range seen {
+		if !contains(protocols, protocol) {
+			protocols = append(protocols, protocol)
+		}
+	}
+	return protocols
+}
+
+func contains(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func bytesReader(value []byte) *bytes.Reader {

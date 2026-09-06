@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/variableway/innate-aiswitcher/internal/providerconfig"
 	"github.com/variableway/innate-aiswitcher/internal/safefile"
 	"github.com/variableway/innate-aiswitcher/internal/store"
 )
@@ -21,6 +22,9 @@ type LaunchOptions struct {
 	Terminal string
 	DryRun   bool
 	Args     []string
+	// Model overrides the effective model with the highest precedence,
+	// above profile.Model and provider.DefaultModel.
+	Model string
 }
 
 type LaunchPlan struct {
@@ -45,10 +49,7 @@ type Builder func(BuildContext) (LaunchPlan, func(), error)
 var builders = map[string]Builder{
 	"claude":     buildClaudePlan,
 	"codex":      buildCodexPlan,
-	"gemini":     buildGeminiPlan,
 	"openai_env": buildOpenAIEnvPlan,
-	"hermes":     buildOpenAIEnvPlan,
-	"openclaw":   buildOpenAIEnvPlan,
 }
 
 func Register(name string, builder Builder) {
@@ -64,21 +65,36 @@ func BuilderNames() []string {
 }
 
 func BuildPlan(agent store.Agent, provider store.Provider, profile *store.Profile, opts LaunchOptions) (LaunchPlan, func(), error) {
-	args := append(defaultArgs(profile), opts.Args...)
-	args = applySkipPermissions(agent, profile, args)
-	model := provider.DefaultModel
-	if profile != nil && profile.Model != "" {
-		model = profile.Model
-	}
-	model = strings.TrimSpace(model)
-	if model == "" {
-		return LaunchPlan{}, nil, fmt.Errorf("provider %s has no default model; set provider.default_model or profile.model", provider.Slug)
-	}
-
 	builder, ok := builders[agent.Adapter]
 	if !ok {
 		return LaunchPlan{}, nil, fmt.Errorf("unsupported adapter: %s", agent.Adapter)
 	}
+
+	// Project the vendor provider onto the endpoint this agent speaks; one
+	// vendor API key thereby powers claude / codex / opencode alike.
+	resolved, err := providerconfig.Resolve(provider, agent.Adapter)
+	if err != nil {
+		return LaunchPlan{}, nil, err
+	}
+	provider = resolved
+
+	args := append(defaultArgs(profile), opts.Args...)
+	args = applySkipPermissions(agent, profile, args)
+	model := strings.TrimSpace(opts.Model)
+	if model == "" && profile != nil {
+		model = strings.TrimSpace(profile.Model)
+	}
+	if model == "" {
+		model = strings.TrimSpace(provider.DefaultModel)
+	}
+	if model == "" {
+		return LaunchPlan{}, nil, fmt.Errorf("provider %s has no default model; set provider.default_model or profile.model", provider.Slug)
+	}
+	if !provider.HasModel(model) {
+		return LaunchPlan{}, nil, fmt.Errorf("model %q is not configured for provider %s (configured: %s); add it with: aisw provider model add %s %s",
+			model, provider.Slug, strings.Join(provider.Models, ", "), provider.Slug, model)
+	}
+
 	return builder(BuildContext{Agent: agent, Provider: provider, Profile: profile, Model: model, Args: args, Options: opts})
 }
 
@@ -232,13 +248,6 @@ func buildCodexPlan(ctx BuildContext) (LaunchPlan, func(), error) {
 	}
 
 	return plan, cleanup, nil
-}
-
-func buildGeminiPlan(ctx BuildContext) (LaunchPlan, func(), error) {
-	return buildEnvPlan(ctx.Agent.Binary, map[string]string{
-		"GEMINI_API_KEY":         ctx.Provider.APIKey,
-		"GOOGLE_GEMINI_BASE_URL": ctx.Provider.BaseURL,
-	}, ctx.Profile, ctx.Args, ctx.Options), func() {}, nil
 }
 
 func buildOpenAIEnvPlan(ctx BuildContext) (LaunchPlan, func(), error) {
@@ -467,6 +476,12 @@ func persistClaudeDefault(provider store.Provider, profile *store.Profile) error
 	path, err := claudeSettingsPath()
 	if err != nil {
 		return err
+	}
+	// Persist the endpoint claude actually speaks, even when the provider
+	// row is a multi-protocol vendor.
+	resolved, resolveErr := providerconfig.Resolve(provider, "claude")
+	if resolveErr == nil {
+		provider = resolved
 	}
 
 	settings := map[string]interface{}{}

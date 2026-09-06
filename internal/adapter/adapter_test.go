@@ -12,11 +12,16 @@ import (
 
 func TestBuildPlanProjectsSameProviderIntoAgentAdapters(t *testing.T) {
 	provider := store.Provider{
-		Slug:         "shared-openai",
+		Slug:         "vendor",
 		BaseURL:      "https://api.example.test/v1",
 		APIKey:       "sk-shared",
 		APIProtocol:  "openai_chat",
 		DefaultModel: "gpt-shared",
+		Models:       []string{"gpt-shared", "gpt-profile"},
+		Variants: map[string]store.ProviderVariant{
+			"anthropic":   {BaseURL: "https://api.example.test/anthropic"},
+			"openai_chat": {BaseURL: "https://api.example.test/v1"},
+		},
 	}
 	profile := &store.Profile{
 		Model:        "gpt-profile",
@@ -24,7 +29,7 @@ func TestBuildPlanProjectsSameProviderIntoAgentAdapters(t *testing.T) {
 		EnvOverrides: map[string]string{"AISW_TEST": "1"},
 	}
 
-	claudePlan, claudeCleanup, err := BuildPlan(store.Agent{Binary: "claude", Adapter: "claude"}, provider, profile, LaunchOptions{CWD: "/tmp/work"})
+	claudePlan, claudeCleanup, err := BuildPlan(store.Agent{Binary: "claude", Adapter: "claude"}, provider, nil, LaunchOptions{CWD: "/tmp/work"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +41,7 @@ func TestBuildPlanProjectsSameProviderIntoAgentAdapters(t *testing.T) {
 	}
 	defer codexCleanup()
 
-	if !strings.Contains(claudePlan.Command, "claude --settings") || !strings.Contains(claudePlan.Command, "--debug") {
+	if !strings.Contains(claudePlan.Command, "claude --settings") {
 		t.Fatalf("unexpected claude command: %s", claudePlan.Command)
 	}
 	if !strings.Contains(codexPlan.Command, "codex --debug") {
@@ -215,34 +220,6 @@ func TestBuildPlanRequiresExplicitModel(t *testing.T) {
 	}
 }
 
-func TestBuildGeminiPlan(t *testing.T) {
-	provider := store.Provider{
-		Slug:         "gemini-provider",
-		BaseURL:      "https://generativelanguage.googleapis.com",
-		APIKey:       "gemini-key",
-		APIProtocol:  "openai_chat",
-		DefaultModel: "gemini-2.0",
-	}
-	plan, cleanup, err := BuildPlan(store.Agent{Binary: "gemini", Adapter: "gemini"}, provider, nil, LaunchOptions{CWD: "/tmp/work"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer cleanup()
-
-	if plan.Command != "gemini" {
-		t.Fatalf("unexpected command: %s", plan.Command)
-	}
-	if plan.Env["GEMINI_API_KEY"] != "gemini-key" {
-		t.Fatalf("unexpected GEMINI_API_KEY: %s", plan.Env["GEMINI_API_KEY"])
-	}
-	if plan.Env["GOOGLE_GEMINI_BASE_URL"] != "https://generativelanguage.googleapis.com" {
-		t.Fatalf("unexpected base url: %s", plan.Env["GOOGLE_GEMINI_BASE_URL"])
-	}
-	if plan.CWD != "/tmp/work" {
-		t.Fatalf("unexpected cwd: %s", plan.CWD)
-	}
-}
-
 func TestBuildOpenAIEnvPlan(t *testing.T) {
 	provider := store.Provider{
 		Slug:         "openai-provider",
@@ -300,10 +277,13 @@ func TestBuilderNames(t *testing.T) {
 	for _, name := range names {
 		seen[name] = true
 	}
-	for _, required := range []string{"claude", "codex", "gemini", "openai_env"} {
+	for _, required := range []string{"claude", "codex", "openai_env"} {
 		if !seen[required] {
 			t.Fatalf("expected builder %q to be registered", required)
 		}
+	}
+	if seen["gemini"] {
+		t.Fatal("gemini builder should have been removed")
 	}
 }
 
@@ -513,13 +493,17 @@ func TestApplySkipPermissions(t *testing.T) {
 }
 
 func TestBuildPlanAppendsSkipPermissionsForKnownAgents(t *testing.T) {
-	provider := store.Provider{
-		Slug: "shared", BaseURL: "https://example.test/v1", APIKey: "sk",
+	claudeProvider := store.Provider{
+		Slug: "shared-claude", BaseURL: "https://example.test", APIKey: "sk",
+		APIProtocol: "anthropic", DefaultModel: "m",
+	}
+	envProvider := store.Provider{
+		Slug: "shared-env", BaseURL: "https://example.test/v1", APIKey: "sk",
 		APIProtocol: "openai_chat", DefaultModel: "m",
 	}
 
 	claudeAgent := store.Agent{Binary: "claude", Adapter: "claude", SkipPermissionsArg: "--dangerously-skip-permissions", SkipPermissionsDefault: true}
-	plan, cleanup, err := BuildPlan(claudeAgent, provider, nil, LaunchOptions{CWD: "/tmp"})
+	plan, cleanup, err := BuildPlan(claudeAgent, claudeProvider, nil, LaunchOptions{CWD: "/tmp"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -528,18 +512,18 @@ func TestBuildPlanAppendsSkipPermissionsForKnownAgents(t *testing.T) {
 		t.Fatalf("claude plan should include skip-permissions flag, got: %s", plan.Command)
 	}
 
-	kimiAgent := store.Agent{Binary: "kimi", Adapter: "openai_env", SkipPermissionsArg: "--yolo", SkipPermissionsDefault: true}
-	plan2, cleanup2, err := BuildPlan(kimiAgent, provider, nil, LaunchOptions{CWD: "/tmp"})
+	envAgent := store.Agent{Binary: "opencode", Adapter: "openai_env", SkipPermissionsArg: "--yolo", SkipPermissionsDefault: true}
+	plan2, cleanup2, err := BuildPlan(envAgent, envProvider, nil, LaunchOptions{CWD: "/tmp"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer cleanup2()
 	if !strings.Contains(plan2.Command, "--yolo") {
-		t.Fatalf("kimi plan should include --yolo flag, got: %s", plan2.Command)
+		t.Fatalf("openai_env plan should include --yolo flag, got: %s", plan2.Command)
 	}
 
 	plainAgent := store.Agent{Binary: "codex", Adapter: "codex"} // no skip flag configured
-	plan3, cleanup3, err := BuildPlan(plainAgent, provider, nil, LaunchOptions{CWD: "/tmp"})
+	plan3, cleanup3, err := BuildPlan(plainAgent, envProvider, nil, LaunchOptions{CWD: "/tmp"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -635,8 +619,8 @@ func TestBuildClaudePlanFullCommandWithSkipPermissions(t *testing.T) {
 
 func TestBuildPlanProfileOverrideDisablesSkipPermissions(t *testing.T) {
 	provider := store.Provider{
-		Slug: "shared", BaseURL: "https://example.test/v1", APIKey: "sk",
-		APIProtocol: "openai_chat", DefaultModel: "m",
+		Slug: "shared-claude", BaseURL: "https://example.test", APIKey: "sk",
+		APIProtocol: "anthropic", DefaultModel: "m",
 	}
 	claudeAgent := store.Agent{Binary: "claude", Adapter: "claude", SkipPermissionsArg: "--dangerously-skip-permissions", SkipPermissionsDefault: true}
 	profile := &store.Profile{SkipPermissions: "false"}

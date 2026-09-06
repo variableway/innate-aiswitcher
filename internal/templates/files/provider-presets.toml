@@ -1,131 +1,53 @@
-[[presets]]
-slug = "deepseek"
-name = "DeepSeek"
+# Vendor-level provider presets ("LLM Provider Config").
+#
+# One [[presets]] block per vendor: a single API key plus one
+# [[presets.variants]] entry per wire protocol the vendor serves. Agents
+# (claude code / codex / opencode) pick the matching variant at launch:
+#   claude   -> anthropic
+#   codex    -> openai_responses (falls back to openai_chat)
+#   opencode -> openai_chat
+#
+# `models` is the vendor's model list — add new models here (or via
+# `aisw provider model add`) and they share the same API key everywhere.
 
-  [[presets.url_options]]
-  slug = "deepseek"
-  label = "OpenAI-compatible"
-  base_url = "https://api.deepseek.com/v1"
-  api_protocol = "openai_chat"
-  default_model = "deepseek-v4-flash"
+[[presets]]
+slug = "glm"
+name = "GLM (Volcengine Ark)"
+default_model = "glm-5.2"
+models = ["glm-5.2", "glm-5.3"]
+
+  [[presets.variants]]
+  protocol = "anthropic"
+  base_url = "https://ark.cn-beijing.volces.com/api/plan"
+  endpoints = { messages = "/v1/messages", models = "/v1/models" }
+  # The plan gateway needs a long timeout and disables non-essential
+  # traffic, matching the working Claude Code settings for GLM on Ark.
+  capabilities = { claude_extra_env = { API_TIMEOUT_MS = "3000000", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1" } }
+
+  [[presets.variants]]
+  protocol = "openai_chat"
+  base_url = "https://ark.cn-beijing.volces.com/api/v3"
   endpoints = { chat_completions = "/chat/completions", models = "/models" }
-
-[[presets]]
-slug = "kimi"
-name = "Kimi / Moonshot"
-
-  [[presets.url_options]]
-  slug = "openai"
-  label = "OpenAI-compatible"
-  base_url = "https://api.moonshot.cn/v1"
-  api_protocol = "openai_chat"
-  default_model = "kimi-latest"
-  endpoints = { chat_completions = "/chat_completions", models = "/models" }
 
 [[presets]]
 slug = "minimax"
 name = "MiniMax"
+default_model = "MiniMax-M3"
+models = ["MiniMax-M3"]
 
-  [[presets.url_options]]
-  slug = "openai"
-  label = "OpenAI-compatible"
-  base_url = "https://api.minimaxi.com/v1"
-  api_protocol = "openai_chat"
-  default_model = "MiniMax-M3"
-  endpoints = { chat_completions = "/chat/completions", models = "/models" }
-
-  [[presets.url_options]]
-  slug = "claude"
-  label = "Claude Code-compatible"
+  [[presets.variants]]
+  protocol = "anthropic"
   base_url = "https://api.minimaxi.com/anthropic"
-  api_protocol = "anthropic"
-  default_model = "MiniMax-M3"
   endpoints = { messages = "/v1/messages", models = "/v1/models" }
   capabilities = { claude_extra_env = { API_TIMEOUT_MS = "3000000", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1", CLAUDE_CODE_AUTO_COMPACT_WINDOW = "512000" } }
 
-  [[presets.url_options]]
-  slug = "codex"
-  label = "Codex-compatible"
+  [[presets.variants]]
+  protocol = "openai_responses"
   base_url = "https://api.minimaxi.com/v1"
-  api_protocol = "openai_responses"
-  default_model = "MiniMax-M3"
   endpoints = { responses = "/responses", models = "/models" }
   capabilities = { codex_auth_mode = "experimental_bearer_token", codex_model_context_window = 512000 }
 
-[[presets]]
-slug = "openai"
-name = "OpenAI"
-
-  [[presets.url_options]]
-  slug = "openai"
-  label = "OpenAI-compatible"
-  base_url = "https://api.openai.com/v1"
-  api_protocol = "openai_chat"
-  default_model = "gpt-4o"
-  endpoints = { chat_completions = "/chat_completions", responses = "/responses", models = "/models" }
-
-[[presets]]
-slug = "xiaomi"
-name = "Xiaomi MiMo (Coding Plan)"
-
-  [[presets.url_options]]
-  slug = "openai"
-  label = "OpenAI-compatible"
-  base_url = "https://token-plan-cn.xiaomimimo.com/v1"
-  api_protocol = "openai_chat"
-  default_model = "mimo-v2.5-pro"
+  [[presets.variants]]
+  protocol = "openai_chat"
+  base_url = "https://api.minimaxi.com/v1"
   endpoints = { chat_completions = "/chat/completions", models = "/models" }
-
-  [[presets.url_options]]
-  slug = "claude"
-  label = "Claude Code-compatible"
-  base_url = "https://token-plan-cn.xiaomimimo.com/anthropic"
-  api_protocol = "anthropic"
-  default_model = "mimo-v2.5-pro"
-  endpoints = { messages = "/v1/messages", models = "/v1/models" }
-  capabilities = { claude_extra_env = { API_TIMEOUT_MS = "3000000", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1", CLAUDE_CODE_AUTO_COMPACT_WINDOW = "512000" } }
-
-  [[presets.url_options]]
-  slug = "codex"
-  label = "Codex-compatible"
-  base_url = "https://token-plan-cn.xiaomimimo.com/v1"
-  api_protocol = "openai_responses"
-  default_model = "mimo-v2.5-pro"
-  endpoints = { responses = "/responses", models = "/models" }
-  capabilities = { codex_auth_mode = "experimental_bearer_token", codex_model_context_window = 512000 }
-
-[[presets]]
-slug = "anthropic"
-name = "Anthropic"
-
-  [[presets.url_options]]
-  slug = "claude"
-  label = "Anthropic Messages API"
-  base_url = "https://api.anthropic.com"
-  api_protocol = "anthropic"
-  default_model = "claude-sonnet-4-6-20250715"
-  endpoints = { messages = "/v1/messages", models = "/v1/models" }
-
-[[presets]]
-slug = "volcengine"
-name = "Volcengine Ark (火山方舟)"
-
-  [[presets.url_options]]
-  slug = "openai"
-  label = "OpenAI-compatible"
-  base_url = "https://ark.cn-beijing.volces.com/api/v3"
-  api_protocol = "openai_chat"
-  default_model = "glm-5.2"
-  endpoints = { chat_completions = "/chat/completions", models = "/models" }
-
-  [[presets.url_options]]
-  slug = "claude"
-  label = "Claude Code-compatible"
-  base_url = "https://ark.cn-beijing.volces.com/api/plan"
-  api_protocol = "anthropic"
-  default_model = "glm-5.2"
-  endpoints = { messages = "/v1/messages", models = "/v1/models" }
-  # glm-5.2 is served over Volcengine Ark's Anthropic-compatible plan gateway.
-  # The plan endpoint needs a long timeout and disables non-essential traffic,
-  # matching the working Claude Code settings for this provider.
-  capabilities = { claude_extra_env = { API_TIMEOUT_MS = "3000000", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1" } }

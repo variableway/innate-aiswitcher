@@ -1,56 +1,66 @@
 version = 1
 
-# Shared provider examples. Keep provider credentials here only when you are
-# comfortable storing them in the local config mirror; otherwise import with
-# empty api_key and fill it through the TUI/CLI.
+# Vendor-level provider examples ("LLM Provider Config"). One [[providers]]
+# block per vendor: a single api_key plus one [providers.variants.<protocol>]
+# entry per wire protocol the vendor serves. Agents resolve their own variant:
+#   claude -> anthropic, codex -> openai_responses (falls back to openai_chat),
+#   opencode -> openai_chat.
+# `models` lists the vendor's models — every model shares the same API key.
 
 [[providers]]
-slug = "minimax-openai"
-name = "MiniMax OpenAI Compatible"
-base_url = "https://api.minimaxi.com/v1"
-api_protocol = "openai_chat"
-default_model = "MiniMax-M3"
-endpoints = { chat_completions = "/chat/completions", models = "/models" }
+slug = "glm"
+name = "GLM (Volcengine Ark)"
+api_key = "" # fill via CLI/TUI/Web, keep out of shared files
+default_model = "glm-5.2"
+models = ["glm-5.2", "glm-5.3"]
 active = true
 
-[[providers]]
-slug = "minimax-claude"
-name = "MiniMax Claude Code Compatible"
-base_url = "https://api.minimaxi.com/anthropic"
-api_protocol = "anthropic"
-default_model = "MiniMax-M3"
+[providers.variants.anthropic]
+base_url = "https://ark.cn-beijing.volces.com/api/plan"
 endpoints = { messages = "/v1/messages", models = "/v1/models" }
-active = true
+capabilities = { claude_extra_env = { API_TIMEOUT_MS = "3000000", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1" } }
+
+[providers.variants.openai_chat]
+base_url = "https://ark.cn-beijing.volces.com/api/v3"
+endpoints = { chat_completions = "/chat/completions", models = "/models" }
 
 [[providers]]
-slug = "kimi-openai"
-name = "Kimi OpenAI Compatible"
-base_url = "https://api.moonshot.cn/v1"
-api_protocol = "openai_chat"
-default_model = "moonshot-v1-8k"
-endpoints = { chat_completions = "/chat/completions", models = "/models" }
+slug = "minimax"
+name = "MiniMax"
+api_key = ""
+default_model = "MiniMax-M3"
+models = ["MiniMax-M3"]
 active = true
 
-[[profiles]]
-slug = "codex-minimax"
-name = "Codex with MiniMax"
-agent = "codex"
-provider = "minimax-openai"
-model = "MiniMax-M3"
-is_default = false
+[providers.variants.anthropic]
+base_url = "https://api.minimaxi.com/anthropic"
+endpoints = { messages = "/v1/messages", models = "/v1/models" }
+
+[providers.variants.openai_responses]
+base_url = "https://api.minimaxi.com/v1"
+endpoints = { responses = "/responses", models = "/models" }
+capabilities = { codex_auth_mode = "experimental_bearer_token", codex_model_context_window = 512000 }
+
+[providers.variants.openai_chat]
+base_url = "https://api.minimaxi.com/v1"
+endpoints = { chat_completions = "/chat/completions", models = "/models" }
+
+# Profiles are OPTIONAL Agent + Provider bindings. Keep them minimal: only
+# carry per-agent overrides (model, args, env/config overrides, default flag).
+# Do NOT restate the provider's default_model here - the adapter falls back to
+# the provider default when a profile omits model.
 
 [[profiles]]
-slug = "claude-minimax"
-name = "Claude Code with MiniMax"
+slug = "claude-glm"
+name = "Claude Code with GLM"
 agent = "claude"
-provider = "minimax-claude"
-model = "MiniMax-M3"
+provider = "glm"
 is_default = false
 
 [[profiles]]
-slug = "kimi-openai"
-name = "Kimi CLI with Moonshot"
-agent = "kimi"
-provider = "kimi-openai"
-model = "moonshot-v1-8k"
+slug = "codex-glm53"
+name = "Codex with GLM 5.3"
+agent = "codex"
+provider = "glm"
+model = "glm-5.3"
 is_default = false

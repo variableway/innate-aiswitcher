@@ -33,6 +33,20 @@ func (s *Store) UpsertProvider(input Provider) (*Provider, error) {
 	if input.Name == "" {
 		input.Name = input.Slug
 	}
+	input.Models = cleanModels(input.Models)
+	// A vendor provider carries per-protocol variants; derive the legacy
+	// top-level base_url/api_protocol (required schema fields, used by
+	// connectivity tests) from the preferred variant when not set explicitly.
+	if len(input.Variants) > 0 {
+		if proto, variant, ok := preferredVariant(input.Variants); ok {
+			if input.APIProtocol == "" {
+				input.APIProtocol = proto
+			}
+			if input.BaseURL == "" {
+				input.BaseURL = variant.BaseURL
+			}
+		}
+	}
 	if input.APIProtocol == "" {
 		input.APIProtocol = "openai_chat"
 	}
@@ -60,6 +74,16 @@ func (s *Store) UpsertProvider(input Provider) (*Provider, error) {
 	}
 	record.Set("api_protocol", input.APIProtocol)
 	record.Set("default_model", input.DefaultModel)
+	if len(input.Models) > 0 {
+		record.Set("models", nonNilSlice(input.Models))
+	} else {
+		record.Set("models", []string{})
+	}
+	if len(input.Variants) > 0 {
+		record.Set("variants", nonNilVariantMap(input.Variants))
+	} else {
+		record.Set("variants", map[string]ProviderVariant{})
+	}
 	record.Set("headers", nonNilMap(input.Headers))
 	record.Set("endpoints", nonNilMap(input.Endpoints))
 	record.Set("capabilities", nonNilInterfaceMap(input.Capabilities))
@@ -73,6 +97,81 @@ func (s *Store) UpsertProvider(input Provider) (*Provider, error) {
 		return nil, err
 	}
 	return recordToProvider(record), nil
+}
+
+// preferredVariant picks the variant used for top-level defaults in a
+// deterministic order: OpenAI chat is the most broadly compatible protocol.
+func preferredVariant(variants map[string]ProviderVariant) (string, ProviderVariant, bool) {
+	for _, proto := range []string{"openai_chat", "openai_responses", "anthropic"} {
+		if variant, ok := variants[proto]; ok {
+			return proto, variant, true
+		}
+	}
+	for proto, variant := range variants {
+		return proto, variant, true
+	}
+	return "", ProviderVariant{}, false
+}
+
+func cleanModels(models []string) []string {
+	cleaned := make([]string, 0, len(models))
+	seen := map[string]bool{}
+	for _, model := range models {
+		model = strings.TrimSpace(model)
+		if model == "" || seen[model] {
+			continue
+		}
+		seen[model] = true
+		cleaned = append(cleaned, model)
+	}
+	return cleaned
+}
+
+// AddModel appends a model to the provider's model list. Because the model
+// list lives on the vendor provider row itself, the stored API key is shared
+// automatically — no extra key configuration is needed.
+func (s *Store) AddModel(slug, model string, setDefault bool) (*Provider, error) {
+	provider, err := s.GetProvider(slug)
+	if err != nil || provider == nil {
+		return nil, fmt.Errorf("provider not found: %s", slug)
+	}
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return nil, fmt.Errorf("model is required")
+	}
+	if !provider.HasModel(model) {
+		provider.Models = append(provider.Models, model)
+	}
+	if setDefault || provider.DefaultModel == "" {
+		provider.DefaultModel = model
+	}
+	return s.UpsertProvider(*provider)
+}
+
+// RemoveModel drops a model from the provider's model list. When the removed
+// model was the default, the first remaining model becomes the default.
+func (s *Store) RemoveModel(slug, model string) (*Provider, error) {
+	provider, err := s.GetProvider(slug)
+	if err != nil || provider == nil {
+		return nil, fmt.Errorf("provider not found: %s", slug)
+	}
+	remaining := make([]string, 0, len(provider.Models))
+	for _, candidate := range provider.Models {
+		if candidate != model {
+			remaining = append(remaining, candidate)
+		}
+	}
+	if len(remaining) == len(provider.Models) {
+		return provider, nil
+	}
+	provider.Models = remaining
+	if provider.DefaultModel == model {
+		provider.DefaultModel = ""
+		if len(remaining) > 0 {
+			provider.DefaultModel = remaining[0]
+		}
+	}
+	return s.UpsertProvider(*provider)
 }
 
 func (s *Store) syncProviderAPIKey(record *core.Record) error {
@@ -419,6 +518,8 @@ func recordToProvider(record *core.Record) *Provider {
 		APIKey:       record.GetString("api_key"),
 		APIProtocol:  record.GetString("api_protocol"),
 		DefaultModel: record.GetString("default_model"),
+		Models:       decodeJSONSlice[string](record.Get("models")),
+		Variants:     decodeJSONMap[map[string]ProviderVariant](record.Get("variants")),
 		Headers:      decodeJSONMap[map[string]string](record.Get("headers")),
 		Endpoints:    decodeJSONMap[map[string]string](record.Get("endpoints")),
 		Capabilities: decodeJSONMap[map[string]interface{}](record.Get("capabilities")),
@@ -466,6 +567,20 @@ func normalizeSlug(value string) string {
 func nonNilMap(value map[string]string) map[string]string {
 	if value == nil {
 		return map[string]string{}
+	}
+	return value
+}
+
+func nonNilVariantMap(value map[string]ProviderVariant) map[string]ProviderVariant {
+	if value == nil {
+		return map[string]ProviderVariant{}
+	}
+	return value
+}
+
+func nonNilSlice(value []string) []string {
+	if value == nil {
+		return []string{}
 	}
 	return value
 }
