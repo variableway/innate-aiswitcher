@@ -18,7 +18,7 @@ task serve
 Open **http://127.0.0.1:8090/** for the Web UI, or use the CLI:
 
 ```bash
-aisw provider presets
+aisw provider list
 aisw start codex codex-local
 ```
 :::
@@ -28,7 +28,7 @@ aisw start codex codex-local
 | Concept | Description |
 | --- | --- |
 | **Provider** | Global LLM connection config — base URL, API key, protocol, default model |
-| **Agent** | A coding agent (`claude`, `codex`, `gemini`, …) with an adapter |
+| **Agent** | A coding agent (`claude`, `codex`, `opencode`) with an adapter |
 | **Profile** | Optional Agent + Provider binding with per-agent overrides |
 | **Adapter** | Launch-time projection — settings JSON, `CODEX_HOME`, or env vars |
 

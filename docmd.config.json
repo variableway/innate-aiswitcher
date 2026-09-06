@@ -37,18 +37,27 @@
   "navigation": [
     { "title": "Home", "path": "/", "icon": "home" },
     { "title": "Usage Guide", "path": "/USAGE", "icon": "book-open" },
+    {
+      "title": "Commands",
+      "icon": "terminal",
+      "collapsible": true,
+      "children": [
+        { "title": "provider", "path": "/commands/provider" },
+        { "title": "profile", "path": "/commands/profile" },
+        { "title": "start", "path": "/commands/start" },
+        { "title": "test", "path": "/commands/test" },
+        { "title": "config", "path": "/commands/config" },
+        { "title": "serve", "path": "/commands/serve" }
+      ]
+    },
     { "title": "REST API", "path": "/API", "icon": "plug" },
-    { "title": "Architecture", "path": "/SPEC", "icon": "layers" },
-    { "title": "Goals", "path": "/GOAL", "icon": "target" },
-    { "title": "Development", "path": "/DEVELOPMENT", "icon": "code" },
-    { "title": "Agent Testing", "path": "/AGENT_TESTING", "icon": "flask-conical" },
     {
       "title": "Tutorials",
       "icon": "graduation-cap",
       "collapsible": true,
       "children": [
         { "title": "Install Guide", "path": "/tutorial/INSTALL_GUIDE" },
-        { "title": "Hermes + DeepSeek Proxy", "path": "/tutorial/HERMES_DEEPSEEK_PROXY" }
+        { "title": "Web App & Terminals", "path": "/commands/web" }
       ]
     },
     { "title": "GitHub", "path": "https://github.com/variableway/innate-aiswitcher", "icon": "github", "external": true },

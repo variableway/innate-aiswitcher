@@ -10,6 +10,45 @@ http://127.0.0.1:8090
 
 默认仅监听本机。Web UI 入口：`GET /`
 
+### Config Preview
+
+```http
+GET /api/aisw/config-preview?agent=claude&provider=glm&model=glm-5.3
+```
+
+Projects agent + provider + model through the real launch pipeline (dry-run) and returns the exact config files and env vars the session would use — no process starts. Files carry a `name` key that maps onto the agent-config whitelist for one-click persistence.
+
+### Agent Config Files
+
+```http
+GET /api/aisw/agent-configs
+```
+
+Returns the whitelisted local config files of claude code (`~/.claude/settings.json`), codex (`~/.codex/config.toml`, `~/.codex/auth.json`) and opencode (`~/.config/opencode/opencode.json`) with their current content.
+
+```http
+PUT /api/aisw/agent-configs/{agent}/{name}
+```
+
+**Body:** `{"content": "<full file text>"}` — atomically saves to the whitelisted path (0600, parent dirs created). Paths outside the whitelist are rejected. Note `auth.json` contains API keys; the endpoint is meant for the local Web UI.
+
+## Terminal Sessions (WebSocket)
+
+```http
+GET /api/aisw/terminal
+Connection: Upgrade
+Upgrade: websocket
+```
+
+Upgrades to a WebSocket bridged to a local PTY shell (`$SHELL -l`). Wire protocol:
+
+- client → server text frames: keystrokes; JSON control frames `{"type":"resize","cols":N,"rows":N}`
+- client → server binary frames: raw stdin
+- server → client binary frames: raw PTY output
+- server → client text frame `{"type":"exit"}`: the shell exited
+
+Each connection is an independent session; closing the socket terminates the shell. The endpoint grants local shell access — keep the server bound to 127.0.0.1 unless you trust the network.
+
 ## Authentication
 
 自定义 `/api/aisw/*` 端点**无认证**，面向本地开发使用（默认 `127.0.0.1`）。请勿将未鉴权的 `serve` 暴露到公网。
@@ -145,13 +184,36 @@ Content-Type: application/json
 
 ```json
 {
-  "preset_slug": "deepseek",
-  "option_slug": "openai",
+  "preset_slug": "glm",
   "api_key": "sk-..."
 }
 ```
 
-根据内置预设与 URL option 生成 provider 并 upsert（与 TUI/CLI 预设投影规则一致）。
+根据内置厂商预设生成 vendor provider 并 upsert（与 TUI/CLI 预设投影规则一致）：一把 API key + 按协议划分的 `variants` + 预设 `models` 列表，claude/codex/opencode 均可直接使用。
+
+### Save Provider as Preset
+
+```http
+POST /api/aisw/presets
+```
+
+**Body:** `{"slug": "volcengine-claude"}` — derives a preset from the stored provider (API key excluded) and writes it to the user presets directory (`~/.innate-aiswitcher/presets/<slug>.toml`).
+
+### Import Presets from TOML Content
+
+```http
+POST /api/aisw/presets/import
+```
+
+**Body:** `{"content": "<preset TOML text>"}` — parses `[[presets]]` blocks and saves each as a user preset file.
+
+### Delete User Preset
+
+```http
+DELETE /api/aisw/presets/{slug}
+```
+
+Deletes a user-saved preset file; builtin presets are rejected. `GET /api/aisw/presets` returns builtin and user presets with a `source` field (`builtin` | `user`); user presets override builtin entries of the same slug.
 
 ### List Provider Models
 
@@ -159,7 +221,7 @@ Content-Type: application/json
 GET /api/aisw/providers/{slug}/models
 ```
 
-与 `aisw test models {slug}` 相同。
+与 `aisw test models {slug}` 相同（调用远端 models 端点）。此外可用 `POST /api/aisw/providers/{slug}/models`（body `{"model":"...","default":false}`）向已配置模型列表添加模型、`DELETE /api/aisw/providers/{slug}/models/{model}` 移除模型 —— 模型共享 Provider 已保存的 API key。
 
 **Response:**
 

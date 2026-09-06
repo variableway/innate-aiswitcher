@@ -1,240 +1,128 @@
+---
+title: "Usage Guide"
+description: "AISwitcher 日常使用：厂商 Provider、模型管理、启动 Agent、Web 与终端。"
+---
+
 # AISwitcher 使用指南
 
 > 在线文档：[variableway.github.io/innate-aiswitcher](https://variableway.github.io/innate-aiswitcher/)
 
-## 前置要求
+## 核心概念
 
-- **Go 1.26+**
-- **[Task](https://taskfile.dev)** (可选，推荐用于快速构建/启动)
-
-```powershell
-# 安装 Task (Windows PowerShell)
-winget install go-task.task
-
-# 或通过 Scoop
-scoop install task
-```
-
----
+- **厂商 Provider（LLM Provider Config）**：一个厂商（`glm`、`minimax`）一行数据、**一把 API Key**。`models` 是模型列表（全部共享 key），`variants` 按协议（`anthropic` / `openai_responses` / `openai_chat`）存放端点。
+- **Agent**：`claude`（Claude Code）、`codex`（Codex CLI）、`opencode`。启动时各自解析所需协议端点——`claude → anthropic`，`codex → openai_responses`（无则回落 openai_chat），`opencode → openai_chat`。
+- **Profile**（可选）：Agent↔Provider 绑定，只放 per-agent 覆盖（模型、参数、默认标记）。
 
 ## 快速开始
 
-### 方式一：使用 Task (推荐)
+```bash
+task build:full        # 构建前端 + Go 单体二进制（bin/aisw 内嵌 Web 应用）
+aisw web               # 启动并打开 Web 页面（Providers / Profiles / Terminal）
+```
+
+一条命令配置 GLM 并启动 Claude Code：
 
 ```bash
-# 1. 构建二进制
-task build
-
-# 2. 启动 Web UI + API 服务
-task serve
+aisw provider from-preset glm --api-key sk-xxx   # 一把 key 服务三个 Agent
+aisw start claude glm
 ```
 
-打开浏览器访问 **http://127.0.0.1:8090/** 进入配置页面。
-
-### 方式二：直接使用 Go
+## 厂商与模型管理
 
 ```bash
-# 构建
-go build -o bin/aisw.exe ./cmd/aisw
+# 从内置预设导入（预设：glm、minimax）
+aisw provider from-preset minimax --api-key-env MINIMAX_API_KEY
+aisw provider from-preset glm --api-key sk-xxx --models glm-air-1   # 追加模型
 
-# 启动 Web 服务
-go run ./cmd/aisw serve --http 127.0.0.1:8090
+# 查看已保存 Provider + 内置预设
+aisw provider list
 
-# 或运行构建好的二进制
-.\bin\aisw.exe serve --http 127.0.0.1:8090
+# 模型管理：加模型 = 共享已有 key，无需再配
+aisw provider model add glm glm-5.3            # 与 glm-5.2 共享同一把 key
+aisw provider model add glm glm-5.3 --default  # 同时设为默认
+aisw provider model list glm
+aisw provider model remove glm glm-5.2
+
+# 手动添加单协议 Provider（一般情况建议 from-preset）
+aisw provider add local-mock \
+  --base-url http://127.0.0.1:18990/v1 \
+  --api-key sk-local --protocol openai_chat \
+  --model test-model --models test-model,test-pro
 ```
 
-启动后会看到：
-
-```
-aisw: data dir ~/.innate-aiswitcher/pb_data
-aisw: bootstrapping database...
-aisw: server listening on http://127.0.0.1:8090
-aisw: web UI    http://127.0.0.1:8090/
-aisw: REST API  http://127.0.0.1:8090/api/aisw/
-```
-
-`serve` 常用参数：
-
-| 参数 | 说明 |
-|------|------|
-| `--http ADDR` | 监听地址（默认 `127.0.0.1:8090`） |
-| `--quiet` | 关闭 HTTP 访问日志 |
-| `--origins` | CORS 允许来源（默认 `*`） |
-| `--admin-ui` | 启用 PocketBase 管理后台 `/_` |
-| `--show-admin-banner` | 显示 PocketBase 启动 banner |
-
-### 方式三：开发模式（构建 + 启动一步完成）
+## 启动 Agent 会话
 
 ```bash
-task dev
+aisw start claude glm                      # 厂商 Provider 直接启动
+aisw start claude glm --model glm-5.3      # 切换模型（须在 models 列表内）
+aisw start codex codex-glm53               # 用 Profile 启动
+aisw start codex                           # 走 .aiswrc 或默认 Profile
+aisw start claude glm --dry-run            # 只打印启动计划
 ```
 
----
+模型优先级：`--model` > Profile `model` > Provider `default_model`。用了未配置的模型会报错并提示 `aisw provider model add`。
 
-## Task 命令速查
+## 项目级默认（.aiswrc）
+
+在项目根手动创建（TOML）：
+
+```toml
+# .aiswrc
+profile = "codex-glm53"
+agent = "codex"
+```
+
+`aisw start codex` 会自动套用；`.aiswrc` 的 `agent` 与命令行冲突时拒绝启动；`--ignore-project` 跳过。
+
+## 连通性测试
+
+```bash
+aisw test provider glm
+aisw test provider glm --model glm-5.3
+aisw test models glm        # 调用厂商 models 端点
+```
+
+## Web 应用与浏览器终端
+
+```bash
+aisw web                   # 127.0.0.1:8090，自动打开浏览器
+aisw web --no-browser
+task web:dev               # 前端开发模式（/api 代理到 127.0.0.1:8090，配合 task serve）
+```
+
+- **Providers 页**：厂商卡片、模型徽标增删（共享 key）、From Preset 导入、Test 连通性
+- **Profiles 页**：按 Agent 过滤可用 Provider，设置模型覆盖与默认
+- **Terminal 页**：浏览器里的本地 PTY 终端，多 tab 独立会话；`Launch agent` 一键 `aisw start <agent> <provider>`
+
+> ⚠️ Terminal 会话即本地 shell。服务默认绑定 127.0.0.1；绑定非回环地址时会打印暴露警告。
+
+## 交互式 TUI
+
+```bash
+aisw          # 选择 Agent → 过滤出支持它的 Provider → 选择模型 → 启动
+```
+
+## 配置导入导出
+
+```bash
+aisw config template --path ~/.innate-aiswitcher/config.toml   # 写出模板（厂商格式示例）
+aisw config import  --path config.toml                         # 导入（默认先备份）
+aisw config export  --path config.toml --include-secrets       # 导出（含 key）
+aisw config dump                                               # 全量写到 init-config 路径
+```
+
+配置文件为厂商格式：一个 `[[providers]]` 块含 `models` 与 `[providers.variants.<protocol>]` 子表，参见模板。
+
+## 命令速查
 
 | 命令 | 说明 |
 |------|------|
-| `task build` | 构建二进制到 `bin/aisw.exe` |
-| `task serve` | 启动 API 服务 + Web UI |
-| `task serve:verbose` | 启动服务并显示 PocketBase 完整日志 |
-| `task dev` | 构建并启动服务（一步完成） |
-| `task run` | 启动交互式 TUI |
-| `task test` | 运行单元测试 |
-| `task verify` | 格式化 + 检查 + 测试 + 构建 |
-| `task clean` | 清理构建产物 |
-| `task docs:dev` | 启动 docmd 文档站本地预览 |
-| `task docs:build` | 构建静态文档到 `site/` |
+| `aisw web` | 启动 Web 应用（含终端），自动开浏览器 |
+| `aisw serve` | 同一服务，不自动开浏览器 |
+| `aisw provider list / add / from-preset / model / delete` | 厂商与模型管理 |
+| `aisw profile add / list` | Profile 管理 |
+| `aisw start AGENT [SELECTOR] [--model M]` | 启动 Agent 会话 |
+| `aisw test provider / models SLUG` | 连通性测试 |
+| `aisw config template / import / export / dump` | 配置镜像 |
 
----
-
-## Web UI 功能
-
-打开 `http://127.0.0.1:8090/` 后，可以在浏览器中：
-
-### Providers 管理
-- 查看、添加、编辑、删除 LLM Provider 配置
-- **从预设导入**：内置 DeepSeek、Kimi、MiniMax、OpenAI、Anthropic、小米 MiMo、火山方舟等 7 个 Provider 预设，一键导入
-- 点击 **Test** 按钮测试 Provider 连通性
-
-### Profiles 管理
-- 创建 Agent + Provider 组合
-- 设置默认 Profile
-- 覆盖模型选择、CLI 参数、权限设置
-
-REST API 完整参考见 [REST API](/API)。
-
----
-
-## CLI 常用命令
-
-### Provider 管理
-
-```bash
-# 列出所有 Provider
-aisw provider list
-
-# 添加 Provider
-aisw provider add deepseek \
-  --name "DeepSeek" \
-  --base-url https://api.deepseek.com/v1 \
-  --api-key sk-xxx \
-  --protocol openai_chat \
-  --model deepseek-v4-flash
-
-# 查看内置预设
-aisw provider presets
-
-# 删除 Provider
-aisw provider delete deepseek
-```
-
-### Profile 管理
-
-```bash
-# 列出所有 Profile
-aisw profile list
-
-# 创建 Profile（将 deepseek provider 绑定到 claude agent）
-aisw profile add claude-deepseek \
-  --name "Claude + DeepSeek" \
-  --agent claude \
-  --provider deepseek \
-  --default
-```
-
-### 配置导入/导出
-
-```bash
-# 导出当前配置到 TOML 文件
-aisw config export --path ~/.innate-aiswitcher/config.toml
-
-# 导出（包含 API Key）
-aisw config export --path config.toml --include-secrets
-
-# 从文件导入配置
-aisw config import --path config.toml
-
-# 导入时跳过自动备份
-aisw config import --path config.toml --no-backup
-
-# 导入为 JSON（TOML/JSON 自动按内容检测，也可显式指定）
-aisw config import --path config.json --format json
-```
-
-`config import` 默认先导出包含 secrets 的备份到 `~/.innate-aiswitcher/`（通过 `--backup-path` 自定义），导入在 SQLite transaction 内执行，失败会回滚。
-
-### 从环境变量读取 API Key
-
-```bash
-aisw provider add minimax-openai \
-  --base-url https://api.minimaxi.com/v1 \
-  --api-key-env MINIMAX_API_KEY \
-  --protocol openai_chat \
-  --model MiniMax-M3
-```
-
-`--api-key-env` 在 `provider add` 时读取环境变量并写入 hidden PocketBase 字段。
-
-### 项目级默认（.aiswrc）
-
-为不同目录绑定默认 Profile / Provider / Agent：
-
-```bash
-cd ~/work-project
-aisw init --profile codex-minimax --agent codex
-```
-
-之后在该目录下执行 `aisw start codex` 会自动用 `codex-minimax`。`aisw init --provider minimax-claude` 也可只绑定 Provider。`--force` 覆盖已有 `.aiswrc`。用 `aisw start codex --ignore-project` 跳过项目配置。
-
-### 测试与启动
-
-```bash
-# 测试 Provider 连接
-aisw test provider deepseek
-
-# 列出 Provider 可用模型
-aisw test models deepseek
-
-# 用指定 Provider 启动 Agent
-aisw start claude deepseek
-```
-
-### 更多帮助
-
-```bash
-aisw --help
-aisw provider --help
-aisw serve --help
-aisw config --help
-aisw init --help
-```
-
----
-
-## 数据存储
-
-所有配置数据存储在 **本地 SQLite 数据库** 中：
-
-```
-~/.innate-aiswitcher/pb_data/
-```
-
-Web UI 和 CLI 操作的是 **同一个数据库**，两者可以交替使用。
-
-### 数据备份
-
-```bash
-# 导出全量配置（含 API Key）
-aisw config export --include-secrets --path backup.toml
-
-# 导入时自动备份（默认开启）
-aisw config import --path backup.toml
-
-# 关闭自动备份
-aisw config import --path backup.toml --no-backup
-
-# 完整 dump（含 secrets）到默认 init-config 路径
-aisw config dump
-```
+详细参考：[commands](/commands/provider)

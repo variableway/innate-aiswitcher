@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Editable model combobox** on the Configs page: pick a configured model, fetch the vendor's real model list from its API (one click, uses the stored key), or type any name — custom/remote models are auto-registered on the provider (sharing its API key) before generating the preview.
+
+- **Config builder** on the Configs page: pick an agent (claude code / codex / opencode) → provider → model and see the exact config files the session would use (claude `settings.json`, codex `config.toml` + `auth.json`, opencode env), generated live via `adapter.Preview` over the real dry-run pipeline; a "write to disk" button persists the writable files to their whitelisted paths. REST: `GET /api/aisw/config-preview`.
+
+- **Configs page** (`/configs`): view, edit and save the real on-disk config files of claude code / codex / opencode directly in the Web UI (`internal/agentconfig` whitelist + atomic 0600 writes; REST `GET /api/aisw/agent-configs`, `PUT /api/aisw/agent-configs/{agent}/{name}`).
+- Chinese is now the default UI language (per-user choice still persists via the sidebar toggle).
+
+- **Bilingual Web UI (中/EN)**: language toggle in the sidebar, auto-detected from the browser and persisted in localStorage (`web/src/lib/i18n.tsx`); every page string translated.
+- **User presets persisted as files**: save any provider as a reusable preset (`aisw provider preset save SLUG`, Web card button) into `~/.innate-aiswitcher/presets/*.toml` (API keys excluded); import presets from TOML files (`aisw provider preset import PATH`, Web upload button); user presets appear alongside builtin ones with a source badge and can be deleted. REST: `GET /api/aisw/presets` now includes `source`, plus `POST /api/aisw/presets`, `POST /api/aisw/presets/import`, `DELETE /api/aisw/presets/{slug}`.
+
+- **Web app rewrite** (`web/`, Vite + React 19 + TanStack Query/Router + shadcn/ui with Tailwind v4): Providers page (vendor cards, per-model badges, preset import, connectivity tests), Profiles page (agent-aware provider filtering), and browser Terminal sessions (xterm.js over WebSocket to local PTYs, multi-tab, one-click `aisw start <agent> <provider>`). Built output is embedded into the Go binary (`task web:build` → `internal/webui/dist`, `task build:full`) — still a single `aisw` binary.
+- Official shadcn skill vendored at `.zcode/skills/shadcn` to constrain frontend work.
+- `aisw web` command: same server as `serve` plus auto-opening the browser; warns when terminal sessions would be exposed beyond loopback.
+- WebSocket endpoint `GET /api/aisw/terminal` (`internal/terminal`) with PTY bridging, resize control frames and exit notifications; covered by Ginkgo BDD specs.
+
+### Changed
+
+- **Vendor-centric providers ("LLM Provider Config")**: one provider row per vendor (e.g. `glm`, `minimax`) with a single `api_key`, a `models` list, and per-protocol `variants` (`anthropic` / `openai_responses` / `openai_chat`). New package `internal/providerconfig` resolves the agent adapter onto the matching variant at launch, so one API key powers claude code, codex and opencode at once.
+  - `providers` collection gains `models` (JSON list) and `variants` (JSON map) fields via migration `1780993000`; legacy single-protocol rows keep working.
+  - Provider presets are vendor-level now (`[[presets]]` + `[[presets.variants]]`); the catalog focuses on `glm` (glm-5.2 / glm-5.3 on Volcengine Ark) and `minimax`.
+  - `POST /api/aisw/providers/from-preset` payload simplified to `{preset_slug, api_key}`.
+- **Focus narrowed to claude / codex / opencode**: gemini, kimi, trae, hermes and openclaw agents are removed (migration deletes the rows; their profiles cascade); the `gemini` adapter and extra provider presets (deepseek, kimi, openai, xiaomi, anthropic, volcengine) are gone.
+
+### Added
+
+- Model management: `aisw provider model add|remove|list SLUG [MODEL]` and `aisw start AGENT PROVIDER --model M`. Models on a vendor share the stored API key — adding `glm-5.3` requires no key reconfiguration. When the provider has a model list, launching with an unlisted model fails with a `provider model add` hint.
+- REST model routes: `POST /api/aisw/providers/{slug}/models` (`{model, default}`) and `DELETE /api/aisw/providers/{slug}/models/{model}`.
+- BDD test suites with Ginkgo + Gomega for `internal/providerconfig`, `internal/store` (real PocketBase), `internal/adapter` and `internal/templates`.
+- `aisw provider from-preset PRESET [--api-key | --api-key-env | --models ...]` CLI command; `provider add` gains `--models`.
+- TUI: agent-aware provider filtering, per-launch model selection, vendor configure flow (one key + model list); Web UI: model list editing on the provider form, vendor-level preset import, models/agents badges on provider cards.
+
 ## [0.2.0] - 2026-07-07
 
 ### Added
