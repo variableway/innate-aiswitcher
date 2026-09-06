@@ -5,12 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
@@ -20,11 +24,14 @@ import (
 	"github.com/pocketbase/pocketbase/ui"
 	"github.com/spf13/cobra"
 	"github.com/variableway/innate-aiswitcher/internal/adapter"
+	"github.com/variableway/innate-aiswitcher/internal/agentconfig"
 	"github.com/variableway/innate-aiswitcher/internal/configfile"
 	"github.com/variableway/innate-aiswitcher/internal/httpcheck"
 	"github.com/variableway/innate-aiswitcher/internal/projectconfig"
+	"github.com/variableway/innate-aiswitcher/internal/providerconfig"
 	"github.com/variableway/innate-aiswitcher/internal/store"
 	"github.com/variableway/innate-aiswitcher/internal/templates"
+	"github.com/variableway/innate-aiswitcher/internal/terminal"
 	"github.com/variableway/innate-aiswitcher/internal/tui"
 	"github.com/variableway/innate-aiswitcher/internal/webui"
 )
@@ -32,11 +39,11 @@ import (
 var defaultAdminUIDistFS = ui.DistDirFS
 
 type Options struct {
-	DataDir           string
-	EnableAdminUI     bool
-	ShowAdminBanner   bool
-	DisableAccessLog  bool
-	InitConfig        string
+	DataDir          string
+	EnableAdminUI    bool
+	ShowAdminBanner  bool
+	DisableAccessLog bool
+	InitConfig       string
 }
 
 type PBGetter func() (*pocketbase.PocketBase, error)
@@ -80,8 +87,8 @@ func NewCLI() *cobra.Command {
 		startCommand(getPB),
 		testCommand(getPB),
 		configCommand(getPB),
-		initCommand(getPB),
 		serveCommand(getPB, &opts),
+		webCommand(getPB, &opts),
 	)
 	return cmd
 }
@@ -130,7 +137,6 @@ func NewWithOptions(opts Options) *pocketbase.PocketBase {
 		startCommand(getPB),
 		testCommand(getPB),
 		configCommand(getPB),
-		initCommand(getPB),
 	)
 	return pb
 }
@@ -201,22 +207,68 @@ func registerRoutes(pb *pocketbase.PocketBase, opts Options) {
 			// Presets
 			registerPresetRoutes(e, pb)
 
-			// Serve the web configuration UI
+			// Serve the web app (Vite + React SPA) with client-side routing
+			// fallback. The mux resolves registered API routes first (most
+			// specific pattern wins); only unmatched paths land here.
 			webHandler, err := webui.Handler()
 			if err == nil {
-				e.Router.GET("/{$}", func(ev *core.RequestEvent) error {
-					webHandler.(http.Handler).ServeHTTP(ev.Response, ev.Request)
-					return nil
-				})
-				e.Router.GET("/style.css", func(ev *core.RequestEvent) error {
-					webHandler.(http.Handler).ServeHTTP(ev.Response, ev.Request)
-					return nil
-				})
-				e.Router.GET("/app.js", func(ev *core.RequestEvent) error {
+				e.Router.GET("/{path...}", func(ev *core.RequestEvent) error {
+					path := ev.Request.URL.Path
+					if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/_") {
+						return apis.NewNotFoundError("", "not found")
+					}
 					webHandler.(http.Handler).ServeHTTP(ev.Response, ev.Request)
 					return nil
 				})
 			}
+
+			// Browser terminal sessions (WebSocket → local PTY).
+			terminalHandler := terminal.Handler(terminal.Options{})
+			e.Router.GET("/api/aisw/terminal", func(ev *core.RequestEvent) error {
+				terminalHandler(ev.Response, ev.Request)
+				return nil
+			})
+
+			// Agent configuration files (claude/codex/opencode) — view & edit.
+			e.Router.GET("/api/aisw/agent-configs", func(ev *core.RequestEvent) error {
+				agents, err := agentconfig.List()
+				if err != nil {
+					return ev.JSON(http.StatusInternalServerError, map[string]any{"ok": false, "message": err.Error()})
+				}
+				return ev.JSON(http.StatusOK, agents)
+			})
+			// Config preview: project agent+provider+model through the real
+			// launch pipeline and return the exact config files/env it would
+			// use, without starting anything.
+			e.Router.GET("/api/aisw/config-preview", func(ev *core.RequestEvent) error {
+				s := store.New(pb)
+				agent, err := s.GetAgent(ev.Request.URL.Query().Get("agent"))
+				if err != nil || agent == nil {
+					return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": "agent not found"})
+				}
+				provider, err := s.GetProvider(ev.Request.URL.Query().Get("provider"))
+				if err != nil || provider == nil {
+					return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": "provider not found"})
+				}
+				preview, err := adapter.Preview(*agent, *provider, ev.Request.URL.Query().Get("model"))
+				if err != nil {
+					return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": err.Error()})
+				}
+				return ev.JSON(http.StatusOK, preview)
+			})
+			e.Router.PUT("/api/aisw/agent-configs/{agent}/{name}", func(ev *core.RequestEvent) error {
+				var payload struct {
+					Content string `json:"content"`
+				}
+				if err := json.NewDecoder(ev.Request.Body).Decode(&payload); err != nil {
+					return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": "invalid JSON: " + err.Error()})
+				}
+				info, err := agentconfig.Write(ev.Request.PathValue("agent"), ev.Request.PathValue("name"), payload.Content)
+				if err != nil {
+					return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": err.Error()})
+				}
+				return ev.JSON(http.StatusOK, info)
+			})
 
 			return e.Next()
 		},
@@ -301,7 +353,7 @@ func registerProviderRoutes(e *core.ServeEvent, pb *pocketbase.PocketBase) {
 		if err != nil || provider == nil {
 			return ev.JSON(http.StatusNotFound, map[string]any{"ok": false, "message": "provider not found"})
 		}
-		result, err2 := httpcheck.ListModels(ev.Request.Context(), nil, *provider)
+		result, err2 := httpcheck.ListModels(ev.Request.Context(), nil, providerconfig.ResolveDefault(*provider))
 		status := http.StatusOK
 		if err2 != nil || !result.OK {
 			status = http.StatusBadGateway
@@ -322,12 +374,41 @@ func registerProviderRoutes(e *core.ServeEvent, pb *pocketbase.PocketBase) {
 		if ev.Request.Body != nil {
 			_ = json.NewDecoder(ev.Request.Body).Decode(&payload)
 		}
-		result, err2 := httpcheck.CheckProvider(ev.Request.Context(), nil, *provider, payload.Model)
+		result, err2 := httpcheck.CheckProvider(ev.Request.Context(), nil, providerconfig.ResolveDefault(*provider), payload.Model)
 		status := http.StatusOK
 		if err2 != nil || !result.OK {
 			status = http.StatusBadGateway
 		}
 		return ev.JSON(status, result)
+	})
+
+	// Add a model to a provider's configured model list (shares the API key)
+	e.Router.POST("/api/aisw/providers/{slug}/models", func(ev *core.RequestEvent) error {
+		var payload struct {
+			Model   string `json:"model"`
+			Default bool   `json:"default"`
+		}
+		if err := json.NewDecoder(ev.Request.Body).Decode(&payload); err != nil || strings.TrimSpace(payload.Model) == "" {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": "model is required"})
+		}
+		s := store.New(pb)
+		provider, err := s.AddModel(ev.Request.PathValue("slug"), payload.Model, payload.Default)
+		if err != nil {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": err.Error()})
+		}
+		provider.APIKey = maskAPIKey(provider.APIKey)
+		return ev.JSON(http.StatusCreated, provider)
+	})
+
+	// Remove a model from a provider's configured model list
+	e.Router.DELETE("/api/aisw/providers/{slug}/models/{model}", func(ev *core.RequestEvent) error {
+		s := store.New(pb)
+		provider, err := s.RemoveModel(ev.Request.PathValue("slug"), ev.Request.PathValue("model"))
+		if err != nil {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": err.Error()})
+		}
+		provider.APIKey = maskAPIKey(provider.APIKey)
+		return ev.JSON(http.StatusOK, provider)
 	})
 }
 
@@ -393,42 +474,87 @@ func registerAgentRoutes(e *core.ServeEvent, pb *pocketbase.PocketBase) {
 }
 
 func registerPresetRoutes(e *core.ServeEvent, pb *pocketbase.PocketBase) {
-	// List provider presets
+	// List provider presets (builtin + user-saved files)
 	e.Router.GET("/api/aisw/presets", func(ev *core.RequestEvent) error {
-		presets, err := templates.ProviderPresets()
+		presets, err := templates.AllPresets()
 		if err != nil {
 			return ev.JSON(http.StatusInternalServerError, map[string]any{"ok": false, "message": err.Error()})
 		}
 		return ev.JSON(http.StatusOK, presets)
 	})
 
-	// Create provider from preset
+	// Save a stored provider as a reusable preset file (API keys excluded)
+	e.Router.POST("/api/aisw/presets", func(ev *core.RequestEvent) error {
+		var payload struct {
+			Slug string `json:"slug"`
+		}
+		if err := json.NewDecoder(ev.Request.Body).Decode(&payload); err != nil || payload.Slug == "" {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": "slug is required"})
+		}
+		s := store.New(pb)
+		provider, err := s.GetProvider(payload.Slug)
+		if err != nil || provider == nil {
+			return ev.JSON(http.StatusNotFound, map[string]any{"ok": false, "message": "provider not found: " + payload.Slug})
+		}
+		path, err := templates.SaveUserPreset(templates.PresetFromProvider(*provider))
+		if err != nil {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": err.Error()})
+		}
+		return ev.JSON(http.StatusCreated, map[string]any{"ok": true, "path": path})
+	})
+
+	// Import preset TOML content uploaded from a file
+	e.Router.POST("/api/aisw/presets/import", func(ev *core.RequestEvent) error {
+		var payload struct {
+			Content string `json:"content"`
+		}
+		if err := json.NewDecoder(ev.Request.Body).Decode(&payload); err != nil || strings.TrimSpace(payload.Content) == "" {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": "content is required"})
+		}
+		tmp, err := os.CreateTemp("", "aisw-preset-*.toml")
+		if err != nil {
+			return ev.JSON(http.StatusInternalServerError, map[string]any{"ok": false, "message": err.Error()})
+		}
+		defer os.Remove(tmp.Name())
+		if _, err := tmp.WriteString(payload.Content); err != nil {
+			tmp.Close()
+			return ev.JSON(http.StatusInternalServerError, map[string]any{"ok": false, "message": err.Error()})
+		}
+		tmp.Close()
+		imported, err := templates.ImportUserPresetFile(tmp.Name())
+		if err != nil {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": err.Error()})
+		}
+		slugs := make([]string, 0, len(imported))
+		for _, preset := range imported {
+			slugs = append(slugs, preset.Slug)
+		}
+		return ev.JSON(http.StatusCreated, map[string]any{"ok": true, "presets": slugs})
+	})
+
+	// Delete a user-saved preset (builtin presets are rejected)
+	e.Router.DELETE("/api/aisw/presets/{slug}", func(ev *core.RequestEvent) error {
+		if err := templates.DeleteUserPreset(ev.Request.PathValue("slug")); err != nil {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": err.Error()})
+		}
+		return ev.JSON(http.StatusOK, map[string]any{"ok": true})
+	})
+
+	// Create a vendor provider from a preset — one API key, per-protocol
+	// variants and the preset model list. Looks up builtin AND user presets.
 	e.Router.POST("/api/aisw/providers/from-preset", func(ev *core.RequestEvent) error {
 		var payload struct {
 			PresetSlug string `json:"preset_slug"`
-			OptionSlug string `json:"option_slug"`
 			APIKey     string `json:"api_key"`
 		}
 		if err := json.NewDecoder(ev.Request.Body).Decode(&payload); err != nil {
 			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": "invalid JSON: " + err.Error()})
 		}
-		preset, err := templates.FindPreset(payload.PresetSlug)
+		preset, err := templates.FindSourcedPreset(payload.PresetSlug)
 		if err != nil {
 			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": err.Error()})
 		}
-		var option templates.URLOption
-		found := false
-		for _, opt := range preset.URLOptions {
-			if opt.Slug == payload.OptionSlug {
-				option = opt
-				found = true
-				break
-			}
-		}
-		if !found {
-			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": "option not found: " + payload.OptionSlug})
-		}
-		provider := templates.ProviderFromPreset(*preset, option, payload.APIKey)
+		provider := templates.ProviderFromPreset(preset.ProviderPreset, payload.APIKey)
 		s := store.New(pb)
 		result, err := s.UpsertProvider(provider)
 		if err != nil {
@@ -454,6 +580,7 @@ func providerCommand(getPB PBGetter) *cobra.Command {
 
 	var add store.Provider
 	var endpointFlags []string
+	var modelsFlag []string
 	addCmd := &cobra.Command{
 		Use:   "add SLUG",
 		Short: "Add or update a shared provider",
@@ -468,6 +595,12 @@ func providerCommand(getPB PBGetter) *cobra.Command {
 				if envName, _ := cmd.Flags().GetString("api-key-env"); envName != "" {
 					add.APIKey = os.Getenv(envName)
 				}
+			}
+			if len(modelsFlag) > 0 {
+				add.Models = append(add.Models, modelsFlag...)
+			}
+			if add.DefaultModel == "" && len(add.Models) > 0 {
+				add.DefaultModel = add.Models[0]
 			}
 			endpoints, err := parseEndpointFlags(endpointFlags)
 			if err != nil {
@@ -488,8 +621,9 @@ func providerCommand(getPB PBGetter) *cobra.Command {
 	addCmd.Flags().StringVar(&add.BaseURL, "base-url", "", "provider base URL")
 	addCmd.Flags().StringVar(&add.APIKey, "api-key", "", "API key")
 	addCmd.Flags().String("api-key-env", "", "read API key from an environment variable")
-	addCmd.Flags().StringVar(&add.APIProtocol, "protocol", "openai_chat", "anthropic|openai_chat|openai_responses|gemini_native|generic")
+	addCmd.Flags().StringVar(&add.APIProtocol, "protocol", "openai_chat", "anthropic|openai_chat|openai_responses")
 	addCmd.Flags().StringVar(&add.DefaultModel, "model", "", "default model")
+	addCmd.Flags().StringSliceVar(&modelsFlag, "models", nil, "model list (comma-separated); models share the provider API key")
 	addCmd.Flags().StringArrayVar(&endpointFlags, "endpoint", nil, "endpoint override as key=path or key=https://host/path")
 	addCmd.Flags().StringVar(&add.Notes, "notes", "", "notes")
 	_ = addCmd.MarkFlagRequired("base-url")
@@ -507,16 +641,37 @@ func providerCommand(getPB PBGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			out := cmd.OutOrStdout()
+			fmt.Fprintln(out, "# Saved providers")
 			for _, provider := range providers {
 				keyState := "missing"
 				if provider.APIKey != "" {
 					keyState = "set"
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\t%s\t%s\tkey=%s\n", provider.Slug, provider.Name, provider.APIProtocol, provider.DefaultModel, provider.BaseURL, keyState)
+				protocols := provider.APIProtocol
+				if len(provider.Variants) > 0 {
+					protocols = strings.Join(providerVariantProtocols(provider), ",")
+				}
+				models := provider.DefaultModel
+				if len(provider.Models) > 0 {
+					models = strings.Join(provider.Models, ",")
+				}
+				fmt.Fprintf(out, "%s\t%s\t%s\t%s\t%s\tkey=%s\n", provider.Slug, provider.Name, protocols, models, provider.BaseURL, keyState)
 			}
+			fmt.Fprintln(out)
+			fmt.Fprintln(out, "# Built-in presets")
+			presets, err := templates.ProviderPresets()
+			if err != nil {
+				return err
+			}
+			tui.PrintPresets(presets)
 			return nil
 		},
 	}
+
+	fromPresetCmd := fromPresetCommand(getPB)
+
+	modelCmd := providerModelCommand(getPB)
 
 	deleteCmd := &cobra.Command{
 		Use:   "delete SLUG",
@@ -531,22 +686,211 @@ func providerCommand(getPB PBGetter) *cobra.Command {
 		},
 	}
 
-	presetsCmd := &cobra.Command{
-		Use:   "presets",
-		Short: "List built-in provider templates",
-		Args:  cobra.NoArgs,
+	cmd.AddCommand(addCmd, listCmd, fromPresetCmd, presetCommands(getPB), modelCmd, deleteCmd)
+	return cmd
+}
+
+// fromPresetCommand creates a vendor provider from a bundled preset with a
+// single API key — the preset carries the per-protocol endpoints and models.
+func fromPresetCommand(getPB PBGetter) *cobra.Command {
+	var apiKey string
+	var apiKeyEnv string
+	var modelsFlag []string
+	cmd := &cobra.Command{
+		Use:   "from-preset PRESET_SLUG",
+		Short: "Add a vendor provider from a preset (builtin or user-saved file)",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			presets, err := templates.ProviderPresets()
+			pb, err := getPB()
 			if err != nil {
 				return err
 			}
-			tui.PrintPresets(presets)
+			preset, err := templates.FindSourcedPreset(args[0])
+			if err != nil {
+				return err
+			}
+			if apiKey == "" && apiKeyEnv != "" {
+				apiKey = os.Getenv(apiKeyEnv)
+			}
+			provider := templates.ProviderFromPreset(preset.ProviderPreset, apiKey)
+			if len(modelsFlag) > 0 {
+				provider.Models = append(provider.Models, modelsFlag...)
+			}
+			saved, err := store.New(pb).UpsertProvider(provider)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "saved provider %s (models: %s, preset source: %s)\n", saved.Slug, strings.Join(saved.Models, ", "), preset.Source)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&apiKey, "api-key", "", "API key shared by every model and agent")
+	cmd.Flags().StringVar(&apiKeyEnv, "api-key-env", "", "read API key from an environment variable")
+	cmd.Flags().StringSliceVar(&modelsFlag, "models", nil, "extra models to register in addition to the preset list")
+	return cmd
+}
+
+// presetCommands save providers as reusable preset files and import preset
+// files — user presets live in ~/.innate-aiswitcher/presets/*.toml and are
+// picked up by provider list / from-preset automatically.
+func presetCommands(getPB PBGetter) *cobra.Command {
+	cmd := &cobra.Command{Use: "preset", Short: "Manage reusable provider presets (saved as TOML files)"}
+
+	saveCmd := &cobra.Command{
+		Use:   "save PROVIDER_SLUG",
+		Short: "Save a stored provider as a preset file (API key excluded)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			pb, err := getPB()
+			if err != nil {
+				return err
+			}
+			provider, err := store.New(pb).GetProvider(args[0])
+			if err != nil || provider == nil {
+				return fmt.Errorf("provider not found: %s", args[0])
+			}
+			path, err := templates.SaveUserPreset(templates.PresetFromProvider(*provider))
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "saved preset %s -> %s (API key excluded)\n", provider.Slug, path)
 			return nil
 		},
 	}
 
-	cmd.AddCommand(addCmd, listCmd, deleteCmd, presetsCmd)
+	importCmd := &cobra.Command{
+		Use:   "import PATH",
+		Short: "Import presets from a TOML file into the user presets directory",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			imported, err := templates.ImportUserPresetFile(args[0])
+			if err != nil {
+				return err
+			}
+			dir, _ := templates.UserPresetsDir()
+			for _, preset := range imported {
+				fmt.Fprintf(cmd.OutOrStdout(), "imported preset %s (models: %s)\n", preset.Slug, strings.Join(preset.Models, ", "))
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "presets directory: %s\n", dir)
+			return nil
+		},
+	}
+
+	listCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List presets (builtin + user files) with their source",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			presets, err := templates.AllPresets()
+			if err != nil {
+				return err
+			}
+			for _, preset := range presets {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\t%s\n", preset.Slug, preset.Name, strings.Join(preset.Models, ","), preset.Source)
+			}
+			return nil
+		},
+	}
+
+	deleteCmd := &cobra.Command{
+		Use:   "delete SLUG",
+		Short: "Delete a user-saved preset file",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := templates.DeleteUserPreset(args[0]); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "deleted preset %s\n", args[0])
+			return nil
+		},
+	}
+
+	cmd.AddCommand(saveCmd, importCmd, listCmd, deleteCmd)
 	return cmd
+}
+
+// providerModelCommand manages a provider's model list. Models share the
+// provider's stored API key — no key handling required.
+func providerModelCommand(getPB PBGetter) *cobra.Command {
+	cmd := &cobra.Command{Use: "model", Short: "Manage a provider's model list (models share the provider API key)"}
+
+	listCmd := &cobra.Command{
+		Use:   "list SLUG",
+		Short: "List configured models",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			pb, err := getPB()
+			if err != nil {
+				return err
+			}
+			provider, err := store.New(pb).GetProvider(args[0])
+			if err != nil || provider == nil {
+				return fmt.Errorf("provider not found: %s", args[0])
+			}
+			out := cmd.OutOrStdout()
+			for _, model := range provider.Models {
+				marker := ""
+				if model == provider.DefaultModel {
+					marker = " (default)"
+				}
+				fmt.Fprintf(out, "%s%s\n", model, marker)
+			}
+			return nil
+		},
+	}
+
+	var setDefault bool
+	addCmd := &cobra.Command{
+		Use:   "add SLUG MODEL",
+		Short: "Add a model to a provider; it shares the stored API key",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			pb, err := getPB()
+			if err != nil {
+				return err
+			}
+			saved, err := store.New(pb).AddModel(args[0], args[1], setDefault)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "added model %s to %s (models: %s, default: %s)\n",
+				args[1], saved.Slug, strings.Join(saved.Models, ", "), saved.DefaultModel)
+			return nil
+		},
+	}
+	addCmd.Flags().BoolVar(&setDefault, "default", false, "make this model the provider default")
+
+	removeCmd := &cobra.Command{
+		Use:   "remove SLUG MODEL",
+		Short: "Remove a model from a provider",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			pb, err := getPB()
+			if err != nil {
+				return err
+			}
+			saved, err := store.New(pb).RemoveModel(args[0], args[1])
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "removed model %s from %s (models: %s, default: %s)\n",
+				args[1], saved.Slug, strings.Join(saved.Models, ", "), saved.DefaultModel)
+			return nil
+		},
+	}
+
+	cmd.AddCommand(listCmd, addCmd, removeCmd)
+	return cmd
+}
+
+func providerVariantProtocols(provider store.Provider) []string {
+	protocols := make([]string, 0, len(provider.Variants))
+	for _, protocol := range []string{"anthropic", "openai_responses", "openai_chat"} {
+		if _, ok := provider.Variants[protocol]; ok {
+			protocols = append(protocols, protocol)
+		}
+	}
+	return protocols
 }
 
 func profileCommand(getPB PBGetter) *cobra.Command {
@@ -623,8 +967,9 @@ func startCommand(getPB PBGetter) *cobra.Command {
 	var terminal string
 	var cwd string
 	var ignoreProject bool
+	var modelOverride string
 	cmd := &cobra.Command{
-		Use:   "start AGENT [PROVIDER_OR_PROFILE] -- [native args]",
+		Use:   "start AGENT [PROVIDER_OR_PROFILE] [--model M] -- [native args]",
 		Short: "Start an agent with a session-only provider/profile",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -667,7 +1012,7 @@ func startCommand(getPB PBGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			opts := adapter.LaunchOptions{CWD: cwd, Terminal: terminal, DryRun: dryRun, Args: nativeArgs}
+			opts := adapter.LaunchOptions{CWD: cwd, Terminal: terminal, DryRun: dryRun, Args: nativeArgs, Model: modelOverride}
 			plan, cleanup, err := adapter.BuildPlan(*agent, *provider, profile, opts)
 			if err != nil {
 				return err
@@ -690,6 +1035,7 @@ func startCommand(getPB PBGetter) *cobra.Command {
 	cmd.Flags().StringVar(&terminal, "terminal", "current", "current|ghostty|terminal")
 	cmd.Flags().StringVar(&cwd, "cwd", "", "working directory")
 	cmd.Flags().BoolVar(&ignoreProject, "ignore-project", false, "ignore .aiswrc project config")
+	cmd.Flags().StringVar(&modelOverride, "model", "", "model override (must be configured on the provider)")
 	return cmd
 }
 
@@ -709,7 +1055,7 @@ func testCommand(getPB PBGetter) *cobra.Command {
 			if err != nil || provider == nil {
 				return fmt.Errorf("provider not found: %s", args[0])
 			}
-			result, err := httpcheck.CheckProvider(context.Background(), nil, *provider, model)
+			result, err := httpcheck.CheckProvider(context.Background(), nil, providerconfig.ResolveDefault(*provider), model)
 			fmt.Fprintln(cmd.OutOrStdout(), httpcheck.Format(result))
 			if err != nil {
 				return err
@@ -735,7 +1081,7 @@ func testCommand(getPB PBGetter) *cobra.Command {
 			if err != nil || provider == nil {
 				return fmt.Errorf("provider not found: %s", args[0])
 			}
-			result, err := httpcheck.ListModels(context.Background(), nil, *provider)
+			result, err := httpcheck.ListModels(context.Background(), nil, providerconfig.ResolveDefault(*provider))
 			fmt.Fprintln(cmd.OutOrStdout(), httpcheck.FormatModels(result))
 			if err != nil {
 				return err
@@ -879,47 +1225,6 @@ func configCommand(getPB PBGetter) *cobra.Command {
 	return cmd
 }
 
-func initCommand(getPB PBGetter) *cobra.Command {
-	var profile string
-	var agent string
-	var provider string
-	var force bool
-	cmd := &cobra.Command{
-		Use:   "init",
-		Short: "Create a .aiswrc project config in the current directory",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cwd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
-			path := filepath.Join(cwd, ".aiswrc")
-			if _, err := os.Stat(path); err == nil && !force {
-				return fmt.Errorf("%s already exists; use --force to overwrite", path)
-			}
-
-			cfg := projectconfig.ProjectConfig{
-				Profile:  strings.TrimSpace(profile),
-				Agent:    strings.TrimSpace(agent),
-				Provider: strings.TrimSpace(provider),
-			}
-			if cfg.Profile == "" && cfg.Provider == "" {
-				return fmt.Errorf("at least one of --profile or --provider is required")
-			}
-			if err := projectconfig.Write(cwd, cfg); err != nil {
-				return err
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "wrote %s\n", path)
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&profile, "profile", "", "default profile slug for this directory")
-	cmd.Flags().StringVar(&agent, "agent", "", "agent slug (optional, for validation)")
-	cmd.Flags().StringVar(&provider, "provider", "", "provider slug (optional, for direct provider binding)")
-	cmd.Flags().BoolVar(&force, "force", false, "overwrite existing .aiswrc")
-	return cmd
-}
-
 func serveCommand(getPB PBGetter, opts *Options) *cobra.Command {
 	var allowedOrigins []string
 	var httpAddr string
@@ -941,26 +1246,7 @@ func serveCommand(getPB PBGetter, opts *Options) *cobra.Command {
 			} else if httpAddr == "" {
 				httpAddr = "127.0.0.1:8090"
 			}
-
-			opts.DisableAccessLog = quiet
-			logServeStartup(opts.DataDir, httpAddr)
-
-			pb, err := getPB()
-			if err != nil {
-				return err
-			}
-			logServeReady(httpAddr)
-			err = apis.Serve(pb, apis.ServeConfig{
-				HttpAddr:           httpAddr,
-				HttpsAddr:          httpsAddr,
-				ShowStartBanner:    true,
-				AllowedOrigins:     allowedOrigins,
-				CertificateDomains: args,
-			})
-			if errors.Is(err, http.ErrServerClosed) {
-				return nil
-			}
-			return err
+			return runServe(cmd, getPB, opts, allowedOrigins, httpAddr, httpsAddr, args, false, quiet)
 		},
 	}
 	cmd.Flags().BoolVar(&quiet, "quiet", false, "disable HTTP access logs")
@@ -968,6 +1254,94 @@ func serveCommand(getPB PBGetter, opts *Options) *cobra.Command {
 	cmd.PersistentFlags().StringVar(&httpAddr, "http", "", "TCP address to listen for HTTP")
 	cmd.PersistentFlags().StringVar(&httpsAddr, "https", "", "TCP address to listen for HTTPS")
 	return cmd
+}
+
+// webCommand starts the same server as `serve` and additionally opens the
+// web UI in the local browser — the single-binary way to run AISwitcher.
+func webCommand(getPB PBGetter, opts *Options) *cobra.Command {
+	var httpAddr string
+	var httpsAddr string
+	var allowedOrigins []string
+	var noBrowser bool
+	var quiet bool
+	cmd := &cobra.Command{
+		Use:          "web",
+		Short:        "Start the web app (providers, profiles and terminal sessions) and open it locally",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if httpAddr == "" {
+				httpAddr = "127.0.0.1:8090"
+			}
+			return runServe(cmd, getPB, opts, allowedOrigins, httpAddr, httpsAddr, nil, !noBrowser, quiet)
+		},
+	}
+	cmd.Flags().StringVar(&httpAddr, "http", "", "TCP address to listen for HTTP (default 127.0.0.1:8090)")
+	cmd.Flags().StringVar(&httpsAddr, "https", "", "TCP address to listen for HTTPS")
+	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "do not open the browser automatically")
+	cmd.Flags().BoolVar(&quiet, "quiet", false, "disable HTTP access logs")
+	cmd.PersistentFlags().StringSliceVar(&allowedOrigins, "origins", []string{"*"}, "CORS allowed domain origins list")
+	return cmd
+}
+
+func runServe(cmd *cobra.Command, getPB PBGetter, opts *Options, allowedOrigins []string, httpAddr, httpsAddr string, certificateDomains []string, openBrowser bool, quiet bool) error {
+	opts.DisableAccessLog = quiet
+	logServeStartup(opts.DataDir, httpAddr)
+	warnTerminalExposure(httpAddr)
+
+	if openBrowser {
+		go func() {
+			time.Sleep(600 * time.Millisecond)
+			openBrowserAt("http://" + strings.Split(httpAddr, ":")[0] + ":" + lastPort(httpAddr))
+		}()
+	}
+
+	pb, err := getPB()
+	if err != nil {
+		return err
+	}
+	logServeReady(httpAddr)
+	err = apis.Serve(pb, apis.ServeConfig{
+		HttpAddr:           httpAddr,
+		HttpsAddr:          httpsAddr,
+		ShowStartBanner:    true,
+		AllowedOrigins:     allowedOrigins,
+		CertificateDomains: certificateDomains,
+	})
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
+}
+
+func lastPort(addr string) string {
+	if idx := strings.LastIndex(addr, ":"); idx >= 0 {
+		return addr[idx+1:]
+	}
+	return addr
+}
+
+func openBrowserAt(url string) {
+	switch runtime.GOOS {
+	case "darwin":
+		_ = exec.Command("open", url).Start()
+	case "windows":
+		_ = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	default:
+		_ = exec.Command("xdg-open", url).Start()
+	}
+}
+
+// warnTerminalExposure prints a warning when browser terminal sessions
+// (local shells) would be reachable from beyond this machine.
+func warnTerminalExposure(httpAddr string) {
+	host, _, err := net.SplitHostPort(httpAddr)
+	if err != nil {
+		return
+	}
+	ip := net.ParseIP(host)
+	if ip != nil && !ip.IsLoopback() {
+		fmt.Fprintln(os.Stderr, terminal.LoopbackWarning(httpAddr))
+	}
 }
 
 func parseEndpointFlags(values []string) (map[string]string, error) {

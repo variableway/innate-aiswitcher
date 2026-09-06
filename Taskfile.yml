@@ -30,11 +30,37 @@ tasks:
   # ── Build & Install ──────────────────────────────────────
 
   build:
-    desc: Build the aisw binary to bin/aisw (current OS)
+    desc: Build the aisw binary to bin/aisw (current OS; embeds the web/dist snapshot)
     cmds:
       - go build -o "{{.BIN_DIR}}/{{.BINARY}}{{.BIN_EXT}}" {{.CLI_PKG}}
     generates:
       - "{{.BIN_DIR}}/{{.BINARY}}"
+
+  build:full:
+    desc: Build the web frontend then the aisw binary (full single-binary app)
+    cmds:
+      - task: web:build
+      - task: build
+
+  web:install:
+    desc: Install web frontend dependencies (web/)
+    cmds:
+      - cmd: npm install
+        dir: web
+
+  web:dev:
+    desc: Vite dev server with /api proxied to 127.0.0.1:8090 (run task serve alongside)
+    cmds:
+      - cmd: npm run dev
+        dir: web
+
+  web:build:
+    desc: Build the web frontend and sync it into internal/webui/dist for go:embed
+    deps: [web:install]
+    cmds:
+      - cmd: npm run build
+        dir: web
+      - cmd: rm -rf internal/webui/dist && mkdir -p internal/webui/dist && cp -R web/dist/. internal/webui/dist/
 
   build:windows:
     desc: Cross-compile for Windows amd64
