@@ -229,6 +229,11 @@ func registerRoutes(pb *pocketbase.PocketBase, opts Options) {
 				return nil
 			})
 
+			// Agent discovery: which agent tools are installed on this machine.
+			e.Router.GET("/api/aisw/agents/installed", func(ev *core.RequestEvent) error {
+				return ev.JSON(http.StatusOK, agentconfig.DiscoverAgents())
+			})
+
 			// Agent configuration files (claude/codex/opencode) — view & edit.
 			e.Router.GET("/api/aisw/agent-configs", func(ev *core.RequestEvent) error {
 				agents, err := agentconfig.List()

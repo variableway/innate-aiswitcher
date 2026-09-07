@@ -4,6 +4,7 @@ import { ProvidersPage } from '@/pages/providers'
 import { ProfilesPage } from '@/pages/profiles'
 import { TerminalPage } from '@/pages/terminal'
 import { ConfigsPage } from '@/pages/configs'
+import { AgentsPage } from '@/pages/agents'
 
 const rootRoute = createRootRoute({
   component: AppShell,
@@ -27,6 +28,12 @@ const terminalRoute = createRoute({
   component: TerminalPage,
 })
 
+const agentsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/agents',
+  component: AgentsPage,
+})
+
 const configsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/configs',
@@ -39,7 +46,7 @@ const indexRoute = createRoute({
   component: () => <ProvidersPage />,
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, providersRoute, profilesRoute, terminalRoute, configsRoute])
+const routeTree = rootRoute.addChildren([indexRoute, agentsRoute, providersRoute, profilesRoute, terminalRoute, configsRoute])
 
 export const router = createRouter({ routeTree })
 

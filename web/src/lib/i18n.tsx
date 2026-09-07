@@ -6,10 +6,30 @@ const dict = {
   // shell
   'app.tagline': { zh: '厂商切换器', en: 'provider switcher' },
   'app.agents': { zh: 'claude code · codex · opencode', en: 'claude code · codex · opencode' },
+  'nav.agents': { zh: 'Agent', en: 'Agents' },
   'nav.providers': { zh: 'Provider', en: 'Providers' },
   'nav.profiles': { zh: 'Profile', en: 'Profiles' },
   'nav.terminal': { zh: '终端', en: 'Terminal' },
   'nav.configs': { zh: '配置文件', en: 'Configs' },
+
+  // agents page
+  'agents.title': { zh: 'AI Agent', en: 'AI Agents' },
+  'agents.subtitle': {
+    zh: '自动检测本机安装的 Agent 工具；每个 Agent 附带配置文件模板，可复制或直接写入磁盘。',
+    en: 'Detects installed agent tools; each agent ships settings templates you can copy or write to disk.',
+  },
+  'agents.installed': { zh: '已安装', en: 'installed' },
+  'agents.notInstalled': { zh: '未安装', en: 'not installed' },
+  'agents.installHint': { zh: '安装：', en: 'Install:' },
+  'agents.templates': { zh: '设置模板', en: 'Settings templates' },
+  'agents.copy': { zh: '复制', en: 'Copy' },
+  'agents.copied': { zh: '已复制到剪贴板', en: 'Copied to clipboard' },
+  'agents.writeDisk': { zh: '写入磁盘', en: 'Write to disk' },
+  'agents.written': { zh: '{file} 模板已写入磁盘', en: '{file} template written to disk' },
+  'agents.templateHint': {
+    zh: '模板中的 <占位符> 需替换为厂商的 Base URL、API Key 与模型；「配置文件」页的生成器可自动填充。',
+    en: 'Replace <PLACEHOLDERS> with your vendor base URL, API key and model — or use the Configs page builder to fill them automatically.',
+  },
 
   // providers page
   'providers.title': { zh: 'LLM Provider', en: 'LLM Providers' },

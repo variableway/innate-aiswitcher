@@ -1,11 +1,12 @@
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
-import { FileCode2, Languages, Plug, SquareTerminal, Zap } from 'lucide-react'
+import { Bot, FileCode2, Languages, Plug, SquareTerminal, Zap } from 'lucide-react'
 import { Toaster } from '@/components/ui/sonner'
 import { Button } from '@/components/ui/button'
 import { useI18n, type TranslationKey } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 const NAV: { to: string; labelKey: TranslationKey; icon: typeof Plug }[] = [
+  { to: '/agents', labelKey: 'nav.agents', icon: Bot },
   { to: '/providers', labelKey: 'nav.providers', icon: Plug },
   { to: '/profiles', labelKey: 'nav.profiles', icon: Zap },
   { to: '/terminal', labelKey: 'nav.terminal', icon: SquareTerminal },

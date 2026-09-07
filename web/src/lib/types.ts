@@ -129,3 +129,82 @@ export interface ConfigPreview {
   files: ConfigPreviewFile[]
   env?: Record<string, string>
 }
+
+export interface InstalledAgent {
+  slug: string
+  name: string
+  binary: string
+  installed: boolean
+  path?: string
+  version?: string
+}
+
+export interface AgentTemplate {
+  name: string
+  label: string
+  lang: string
+  content: string
+}
+
+/** Settings templates shipped with the app (placeholders in <ANGLE_BRACKETS>). */
+export const AGENT_TEMPLATES: Record<string, AgentTemplate[]> = {
+  claude: [
+    {
+      name: 'settings', label: 'settings.json', lang: 'json',
+      content: `{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "<YOUR_API_KEY>",
+    "ANTHROPIC_API_KEY": "<YOUR_API_KEY>",
+    "ANTHROPIC_BASE_URL": "<PROVIDER_BASE_URL>",
+    "ANTHROPIC_MODEL": "<MODEL>",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "<MODEL>",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "<MODEL>",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "<MODEL>"
+  }
+}
+`,
+    },
+  ],
+  codex: [
+    {
+      name: 'config', label: 'config.toml', lang: 'toml',
+      content: `model = "<MODEL>"
+model_provider = "<PROVIDER_NAME>"
+
+[model_providers.<PROVIDER_NAME>]
+name = "<PROVIDER_NAME>"
+base_url = "<PROVIDER_BASE_URL>"
+wire_api = "chat"
+`,
+    },
+    {
+      name: 'auth', label: 'auth.json', lang: 'json',
+      content: `{
+  "OPENAI_API_KEY": "<YOUR_API_KEY>"
+}
+`,
+    },
+  ],
+  opencode: [
+    {
+      name: 'opencode', label: 'opencode.json', lang: 'json',
+      content: `{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "<PROVIDER_KEY>": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "<PROVIDER_NAME>",
+      "options": {
+        "baseURL": "<PROVIDER_BASE_URL>",
+        "apiKey": "<YOUR_API_KEY>"
+      },
+      "models": {
+        "<MODEL>": {}
+      }
+    }
+  }
+}
+`,
+    },
+  ],
+}

@@ -1,4 +1,4 @@
-import type { Agent, AgentConfigFile, AgentConfigInfo, ConfigPreview, ModelsResult, Preset, Profile, Provider, TestResult } from './types'
+import type { Agent, AgentConfigFile, AgentConfigInfo, ConfigPreview, InstalledAgent, ModelsResult, Preset, Profile, Provider, TestResult } from './types'
 
 const API = '/api/aisw'
 
@@ -79,6 +79,7 @@ export const api = {
   listPresets: () => request<Preset[]>('/presets'),
 
   listAgentConfigs: () => request<AgentConfigInfo[]>('/agent-configs'),
+  installedAgents: () => request<InstalledAgent[]>('/agents/installed'),
   configPreview: (agent: string, provider: string, model: string) =>
     request<ConfigPreview>(`/config-preview?agent=${encodeURIComponent(agent)}&provider=${encodeURIComponent(provider)}&model=${encodeURIComponent(model)}`),
   saveAgentConfig: (agent: string, name: string, content: string) =>

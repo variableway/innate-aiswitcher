@@ -21,8 +21,15 @@ var _ = Describe("agent configuration files", func() {
 
 	BeforeEach(func() {
 		home = GinkgoT().TempDir()
+		original := os.Getenv("HOME")
 		os.Setenv("HOME", home)
-		DeferCleanup(func() { os.Unsetenv("HOME") })
+		DeferCleanup(func() {
+			if original == "" {
+				os.Unsetenv("HOME")
+			} else {
+				os.Setenv("HOME", original)
+			}
+		})
 	})
 
 	It("lists every agent with its whitelisted files and content", func() {
@@ -72,5 +79,52 @@ var _ = Describe("agent configuration files", func() {
 		Expect(err).To(MatchError(ContainSubstring("unknown agent config")))
 		_, err = agentconfig.Write("codex", "../../etc/passwd", "x")
 		Expect(err).To(MatchError(ContainSubstring("unknown agent config")))
+	})
+})
+
+var _ = Describe("agent discovery and templates", func() {
+	It("detects installed binaries with versions", func() {
+		agents := agentconfig.DiscoverAgents()
+		Expect(agents).To(HaveLen(3))
+		slugs := []string{}
+		for _, agent := range agents {
+			slugs = append(slugs, agent.Slug)
+			if agent.Installed {
+				Expect(agent.Path).NotTo(BeEmpty())
+			}
+		}
+		Expect(slugs).To(Equal([]string{"claude", "codex", "opencode"}))
+	})
+
+	It("provides a settings template for every agent", func() {
+		for _, slug := range agentconfig.AgentOrder {
+			templates := agentconfig.AgentTemplates[slug]
+			Expect(templates).NotTo(BeEmpty(), "agent %s needs a template", slug)
+			for _, template := range templates {
+				// every template carries at least one placeholder to fill in
+				Expect(template.Content).To(SatisfyAny(
+					ContainSubstring("<YOUR_API_KEY>"),
+					ContainSubstring("<MODEL>"),
+					ContainSubstring("<PROVIDER_BASE_URL>"),
+				))
+				// every writable template maps onto the persistence whitelist
+				if template.Name != "" {
+					_, err := agentconfig.Read(slug, template.Name)
+					Expect(err).NotTo(HaveOccurred(), "template %s/%s must be whitelisted", slug, template.Name)
+				}
+			}
+		}
+	})
+
+	It("writes a template to disk through the whitelist", func() {
+		home := GinkgoT().TempDir()
+		original := os.Getenv("HOME")
+		os.Setenv("HOME", home)
+		DeferCleanup(func() { os.Setenv("HOME", original) })
+
+		tpl := agentconfig.AgentTemplates["codex"][0]
+		info, err := agentconfig.Write("codex", tpl.Name, tpl.Content)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(info.Content).To(ContainSubstring("<MODEL>"))
 	})
 })
