@@ -14,8 +14,8 @@ const dict = {
   // providers page
   'providers.title': { zh: 'LLM Provider', en: 'LLM Providers' },
   'providers.subtitle': {
-    zh: '一个厂商、一把 API Key —— 所有模型与 Agent 共享。',
-    en: 'One vendor, one API key — every model and agent shares it.',
+    zh: '每个厂商（LLM Provider）只维护一把 API Key 和模型列表；与具体 Agent 无关。',
+    en: 'Each vendor (LLM provider) is just an API key plus its model list — agent-agnostic.',
   },
   'providers.fromPreset': { zh: '从预设导入', en: 'From Preset' },
   'providers.add': { zh: '添加 Provider', en: 'Add Provider' },
@@ -23,8 +23,8 @@ const dict = {
   'providers.loadFailed': { zh: '加载 Provider 失败', en: 'Failed to load providers' },
   'providers.empty.title': { zh: '还没有 Provider', en: 'No providers configured' },
   'providers.empty.desc': {
-    zh: '从内置预设导入一个厂商 —— 一把 API Key 即可服务 claude code、codex 和 opencode。',
-    en: 'Import a vendor from a bundled preset — a single API key serves claude code, codex and opencode.',
+    zh: '从预设导入一个厂商（如 MiniMax、GLM），只需填入该厂商的 API Key。',
+    en: 'Import a vendor (e.g. MiniMax, GLM) from a preset — you only supply its API key.',
   },
   'providers.empty.cta': { zh: '从预设导入', en: 'Import from Preset' },
   'providers.keySet': { zh: '已配置 Key', en: 'key set' },
@@ -57,8 +57,8 @@ const dict = {
     en: 'Vendor provider — per-protocol endpoints are managed by the preset and stay unchanged.',
   },
   'providerForm.singleNote': {
-    zh: '单端点 Provider。多协议厂商建议使用「从预设导入」。',
-    en: 'Single-endpoint provider. For multi-protocol vendors prefer "From Preset".',
+    zh: '一般用「从预设导入」添加厂商（自动带端点）；此处手动填写自定义端点。',
+    en: 'Prefer "From Preset" for vendors (endpoints come with it); fill these only for custom endpoints.',
   },
   'providerForm.slug': { zh: 'Slug', en: 'Slug' },
   'providerForm.name': { zh: '显示名称', en: 'Display name' },
@@ -79,8 +79,8 @@ const dict = {
   'providerForm.modelsDesc': { zh: '逗号分隔；全部共享同一把 Key。', en: 'Comma-separated; all share the API key.' },
   'providerForm.defaultModel': { zh: '默认模型', en: 'Default model' },
   'providerForm.defaultModelHint': { zh: '留空取第一个模型', en: 'first model when empty' },
-  'providerForm.protocol': { zh: '协议', en: 'Protocol' },
-  'providerForm.baseUrl': { zh: 'Base URL', en: 'Base URL' },
+  'providerForm.protocol': { zh: '协议（高级）', en: 'Protocol (advanced)' },
+  'providerForm.baseUrl': { zh: '端点 Base URL（高级）', en: 'Endpoint base URL (advanced)' },
   'providerForm.cancel': { zh: '取消', en: 'Cancel' },
   'providerForm.save': { zh: '保存', en: 'Save' },
   'providerForm.created': { zh: 'Provider 已创建', en: 'Provider created' },

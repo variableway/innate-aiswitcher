@@ -18,7 +18,6 @@ import { ProviderFormDialog } from '@/components/providers/provider-form'
 import { useDeleteProvider, useProviders, useSavePreset } from '@/lib/queries'
 import { useI18n } from '@/lib/i18n'
 import type { Provider } from '@/lib/types'
-import { providerAgents, providerProtocols } from '@/lib/types'
 
 export function ProvidersPage() {
   const { data: providers, isPending, isError, error } = useProviders()
@@ -113,8 +112,6 @@ function ProviderCard({ provider, onEdit }: { provider: Provider; onEdit: () => 
   const [testOpen, setTestOpen] = useState(false)
   const { t } = useI18n()
   const hasKey = Boolean(provider.api_key)
-  const protocols = providerProtocols(provider)
-  const agents = providerAgents(provider)
 
   return (
     <Card className="flex h-full flex-col">
@@ -135,12 +132,6 @@ function ProviderCard({ provider, onEdit }: { provider: Provider; onEdit: () => 
         </div>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-3">
-        <div className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-1 font-mono text-xs">
-          <span>{protocols.join(' + ')}</span>
-          <span>
-            {t('providers.agents')}: {agents.length > 0 ? agents.join(', ') : '—'}
-          </span>
-        </div>
         <ModelList provider={provider} />
         <div className="mt-auto flex flex-wrap justify-end gap-2 pt-2">
           <Button
