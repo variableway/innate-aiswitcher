@@ -69,3 +69,8 @@ web/dist/
 
 # GUI test evidence screenshots (session artifacts)
 gui-test-screenshots/
+
+# Embedded web build output (real assets are built locally via task web:build;
+# only the placeholder index.html is committed so go:embed always compiles)
+internal/webui/dist/*
+!internal/webui/dist/index.html
