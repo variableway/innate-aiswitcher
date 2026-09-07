@@ -51,3 +51,75 @@ models = ["MiniMax-M3"]
   protocol = "openai_chat"
   base_url = "https://api.minimaxi.com/v1"
   endpoints = { chat_completions = "/chat/completions", models = "/models" }
+
+[[presets]]
+slug = "kimi"
+name = "Kimi / Moonshot"
+default_model = "kimi-latest"
+models = ["kimi-latest", "kimi-k2-turbo-preview"]
+
+  [[presets.variants]]
+  protocol = "openai_chat"
+  base_url = "https://api.moonshot.cn/v1"
+  endpoints = { chat_completions = "/chat/completions", models = "/models" }
+
+[[presets]]
+slug = "deepseek"
+name = "DeepSeek"
+default_model = "deepseek-chat"
+models = ["deepseek-chat", "deepseek-reasoner"]
+
+  [[presets.variants]]
+  protocol = "openai_chat"
+  base_url = "https://api.deepseek.com/v1"
+  endpoints = { chat_completions = "/chat/completions", models = "/models" }
+
+[[presets]]
+slug = "openai"
+name = "OpenAI"
+default_model = "gpt-4o"
+models = ["gpt-4o", "gpt-4o-mini"]
+
+  [[presets.variants]]
+  protocol = "openai_chat"
+  base_url = "https://api.openai.com/v1"
+  endpoints = { chat_completions = "/chat/completions", responses = "/responses", models = "/models" }
+
+  [[presets.variants]]
+  protocol = "openai_responses"
+  base_url = "https://api.openai.com/v1"
+  endpoints = { responses = "/responses", models = "/models" }
+
+[[presets]]
+slug = "anthropic"
+name = "Anthropic"
+default_model = "claude-sonnet-4-6-20250715"
+models = ["claude-sonnet-4-6-20250715"]
+
+  [[presets.variants]]
+  protocol = "anthropic"
+  base_url = "https://api.anthropic.com"
+  endpoints = { messages = "/v1/messages", models = "/v1/models" }
+
+[[presets]]
+slug = "xiaomi"
+name = "Xiaomi MiMo"
+default_model = "mimo-v2.5-pro"
+models = ["mimo-v2.5-pro"]
+
+  [[presets.variants]]
+  protocol = "anthropic"
+  base_url = "https://token-plan-cn.xiaomimimo.com/anthropic"
+  endpoints = { messages = "/v1/messages", models = "/v1/models" }
+  capabilities = { claude_extra_env = { API_TIMEOUT_MS = "3000000", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1" } }
+
+  [[presets.variants]]
+  protocol = "openai_responses"
+  base_url = "https://token-plan-cn.xiaomimimo.com/v1"
+  endpoints = { responses = "/responses", models = "/models" }
+  capabilities = { codex_auth_mode = "experimental_bearer_token", codex_model_context_window = 512000 }
+
+  [[presets.variants]]
+  protocol = "openai_chat"
+  base_url = "https://token-plan-cn.xiaomimimo.com/v1"
+  endpoints = { chat_completions = "/chat/completions", models = "/models" }

@@ -12,18 +12,18 @@ import (
 
 var _ = Describe("vendor provider presets", func() {
 	Describe("bundled catalog", func() {
-		It("contains exactly the focused vendors (glm, minimax)", func() {
+		It("contains the bundled vendor catalog", func() {
 			presets, err := ProviderPresets()
 			Expect(err).NotTo(HaveOccurred())
 			slugs := make([]string, 0, len(presets))
 			for _, preset := range presets {
 				slugs = append(slugs, preset.Slug)
 			}
-			Expect(slugs).To(ConsistOf("glm", "minimax"))
+			Expect(slugs).To(ConsistOf("glm", "minimax", "kimi", "deepseek", "openai", "anthropic", "xiaomi"))
 		})
 
 		It("finds each vendor by slug", func() {
-			for _, slug := range []string{"glm", "minimax"} {
+			for _, slug := range []string{"glm", "minimax", "kimi", "deepseek", "openai", "anthropic", "xiaomi"} {
 				preset, err := FindPreset(slug)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(preset.Slug).To(Equal(slug))
@@ -31,7 +31,7 @@ var _ = Describe("vendor provider presets", func() {
 		})
 
 		It("rejects unknown vendors", func() {
-			_, err := FindPreset("openai")
+			_, err := FindPreset("not-a-vendor")
 			Expect(err).To(MatchError(ContainSubstring("not found")))
 		})
 	})
@@ -149,7 +149,7 @@ var _ = Describe("user preset files", func() {
 	It("starts with only builtin presets", func() {
 		all, err := AllPresets()
 		Expect(err).NotTo(HaveOccurred())
-		Expect(all).To(HaveLen(2))
+		Expect(all).To(HaveLen(7))
 		for _, preset := range all {
 			Expect(preset.Source).To(Equal("builtin"))
 		}

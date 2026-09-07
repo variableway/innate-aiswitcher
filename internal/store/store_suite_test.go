@@ -230,3 +230,113 @@ var _ = Describe("vendor provider storage", func() {
 		})
 	})
 })
+
+var _ = Describe("legacy vendor normalization", func() {
+	var s *Store
+
+	minimaxPreset := func() Provider {
+		return Provider{
+			Slug: "minimax", Name: "MiniMax",
+			DefaultModel: "MiniMax-M3", Models: []string{"MiniMax-M3"},
+			Variants: map[string]ProviderVariant{
+				"anthropic":       {BaseURL: "https://api.minimaxi.com/anthropic"},
+				"openai_responses": {BaseURL: "https://api.minimaxi.com/v1"},
+				"openai_chat":      {BaseURL: "https://api.minimaxi.com/v1"},
+			},
+		}
+	}
+
+	BeforeEach(func() {
+		s = newTestStore()
+	})
+
+	It("merges minimax-claude/minimax-codex into a single MiniMax row", func() {
+		_, err := s.UpsertProvider(Provider{
+			Slug: "minimax-claude", Name: "MiniMax Claude Code-compatible",
+			BaseURL: "https://api.minimaxi.com/anthropic", APIProtocol: "anthropic",
+			DefaultModel: "MiniMax-M3", APIKey: "sk-legacy-key",
+		})
+		Expect(err).NotTo(HaveOccurred())
+		_, err = s.UpsertProvider(Provider{
+			Slug: "minimax-codex", Name: "MiniMax Codex-compatible",
+			BaseURL: "https://api.minimaxi.com/v1", APIProtocol: "openai_responses",
+			DefaultModel: "MiniMax-M3",
+		})
+		Expect(err).NotTo(HaveOccurred())
+		_, err = s.UpsertProfile(Profile{Slug: "claude-mm", AgentSlug: "claude", ProviderSlug: "minimax-claude"})
+		Expect(err).NotTo(HaveOccurred())
+
+		merged, err := s.NormalizeLegacyVendors(map[string]Provider{"minimax": minimaxPreset()})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(merged).To(ContainElement("minimax"))
+
+		providers, err := s.ListProviders()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(providers).To(HaveLen(1))
+		Expect(providers[0].Slug).To(Equal("minimax"))
+		Expect(providers[0].Name).To(Equal("MiniMax"))
+		Expect(providers[0].APIKey).To(Equal("sk-legacy-key"), "the key must survive the merge")
+		Expect(providers[0].Variants).To(HaveLen(3))
+
+		// the profile now points at the merged row
+		profile, err := s.GetProfile("claude-mm")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(profile.ProviderSlug).To(Equal("minimax"))
+	})
+
+	It("keeps user-configured models and default across the merge", func() {
+		_, err := s.UpsertProvider(Provider{
+			Slug: "volcengine-claude", Name: "Volcengine Ark (火山方舟) Claude Code-compatible",
+			BaseURL: "https://ark.cn-beijing.volces.com/api/plan", APIProtocol: "anthropic",
+			DefaultModel: "glm-5.2", Models: []string{"glm-5.2", "glm-5.3-custom"}, APIKey: "ark-key",
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		glmPreset := Provider{
+			Slug: "glm", Name: "GLM (Volcengine Ark)", DefaultModel: "glm-5.2",
+			Models: []string{"glm-5.2", "glm-5.3"},
+			Variants: map[string]ProviderVariant{
+				"anthropic":  {BaseURL: "https://ark.cn-beijing.volces.com/api/plan"},
+				"openai_chat": {BaseURL: "https://ark.cn-beijing.volces.com/api/v3"},
+			},
+		}
+		merged, err := s.NormalizeLegacyVendors(map[string]Provider{"glm": glmPreset})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(merged).To(ContainElement("glm"))
+
+		provider, err := s.GetProvider("glm")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(provider.Name).To(Equal("GLM (Volcengine Ark)"))
+		Expect(provider.Models).To(ConsistOf("glm-5.2", "glm-5.3", "glm-5.3-custom"))
+		Expect(provider.DefaultModel).To(Equal("glm-5.2"))
+	})
+
+	It("is idempotent and leaves clean vendor rows alone", func() {
+		_, err := s.UpsertProvider(minimaxPreset())
+		Expect(err).NotTo(HaveOccurred())
+
+		merged, err := s.NormalizeLegacyVendors(map[string]Provider{"minimax": minimaxPreset()})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(merged).To(BeEmpty())
+
+		providers, _ := s.ListProviders()
+		Expect(providers).To(HaveLen(1))
+	})
+
+	It("merges even without a matching preset, keeping the legacy endpoint", func() {
+		_, err := s.UpsertProvider(Provider{
+			Slug: "myvendor-openai", Name: "MyVendor OpenAI-compatible",
+			BaseURL: "https://my.example/v1", APIProtocol: "openai_chat",
+			DefaultModel: "m1", APIKey: "k",
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		// no preset for "myvendor" — normalization leaves unknown groups alone
+		merged, err := s.NormalizeLegacyVendors(map[string]Provider{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(merged).To(BeEmpty())
+		provider, err := s.GetProvider("myvendor-openai")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(provider.APIKey).To(Equal("k"))
+	})
+})

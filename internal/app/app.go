@@ -62,6 +62,9 @@ func NewCLI() *cobra.Command {
 		if err := maybeInitConfig(pb, opts.InitConfig); err != nil {
 			return nil, err
 		}
+		if err := normalizeLegacyVendors(pb); err != nil {
+			return nil, err
+		}
 		return pb, nil
 	}
 
@@ -1414,6 +1417,28 @@ func maybeInitConfig(pb *pocketbase.PocketBase, initConfigPath string) error {
 		return fmt.Errorf("init-config import failed: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "initialized from %s\n", path)
+	return nil
+}
+
+// normalizeLegacyVendors merges legacy per-protocol provider rows
+// ("minimax-claude", "volcengine-claude", …) into clean vendor rows using
+// the bundled presets, preserving keys/models and re-pointing profiles.
+func normalizeLegacyVendors(pb *pocketbase.PocketBase) error {
+	presetBySlug := map[string]store.Provider{}
+	sourced, err := templates.AllPresets()
+	if err == nil {
+		for _, preset := range sourced {
+			provider := templates.ProviderFromPreset(preset.ProviderPreset, "")
+			presetBySlug[preset.Slug] = provider
+		}
+	}
+	merged, err := store.New(pb).NormalizeLegacyVendors(presetBySlug)
+	if err != nil {
+		return fmt.Errorf("legacy vendor normalization failed: %w", err)
+	}
+	if len(merged) > 0 {
+		fmt.Fprintf(os.Stderr, "normalized legacy providers: %s\n", strings.Join(merged, ", "))
+	}
 	return nil
 }
 
