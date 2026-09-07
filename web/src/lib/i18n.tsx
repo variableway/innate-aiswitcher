@@ -89,6 +89,13 @@ const dict = {
     en: 'Replace <PLACEHOLDERS> with your vendor base URL, API key and model — or use the Configs page builder to fill them automatically.',
   },
 
+  // agent page builder link
+  'agents.builder': { zh: '生成配置', en: 'Build config' },
+  'agents.builderHint': {
+    zh: '选择该 Agent 可用的 Provider 与模型（可从官方拉取清单），一键生成配置文件。',
+    en: 'Pick a provider and model available to this agent (fetch the official list), then jump to the config builder.',
+  },
+
   // providers page
   'providers.title': { zh: 'LLM Provider', en: 'LLM Providers' },
   'providers.subtitle': {

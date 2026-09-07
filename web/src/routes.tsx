@@ -38,6 +38,11 @@ const agentsRoute = createRoute({
 const configsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/configs',
+  validateSearch: (search: Record<string, unknown>) => ({
+    agent: typeof search.agent === 'string' ? search.agent : undefined,
+    provider: typeof search.provider === 'string' ? search.provider : undefined,
+    model: typeof search.model === 'string' ? search.model : undefined,
+  }),
   component: ConfigsPage,
 })
 

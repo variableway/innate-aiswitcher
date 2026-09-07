@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSearch } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { FileCode2, HardDriveDownload, RotateCw, Save } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -37,11 +38,24 @@ export function ConfigsPage() {
 
   const agents = (agentsQuery.data ?? []).filter((a) => a.active)
   const providers = providersQuery.data ?? []
+  const search = useSearch({ from: '/configs' })
 
-  const [agent, setAgent] = useState<string>(agents[0]?.slug ?? 'claude')
+  const [agent, setAgent] = useState<string>(search.agent ?? agents[0]?.slug ?? 'claude')
   const usableProviders = providers.filter((p) => p.active && providerAgents(p).includes(agent))
-  const [provider, setProvider] = useState<string>('')
-  const [model, setModel] = useState<string>('')
+  const [provider, setProvider] = useState<string>(search.provider ?? '')
+  const [model, setModel] = useState<string>(search.model ?? '')
+
+  const [searchApplied, setSearchApplied] = useState(false)
+  // deep-link initialization (?agent=&provider=&model=) from the Agents page
+  useEffect(() => {
+    if (searchApplied || providers.length === 0) return
+    setSearchApplied(true)
+    if (search.agent) setAgent(search.agent)
+    if (search.provider && providers.some((p) => p.slug === search.provider)) {
+      setProvider(search.provider)
+    }
+    if (search.model) setModel(search.model)
+  }, [searchApplied, providers.length, search.agent, search.provider, search.model])
 
   // keep provider/model coherent when agent or provider changes
   useEffect(() => {
