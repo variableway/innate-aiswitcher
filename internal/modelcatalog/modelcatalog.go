@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	apiURL     = "https://models.dev/api.json"
-	cacheTTL   = 5 * time.Minute
+	apiURL      = "https://models.dev/api.json"
+	cacheTTL    = 5 * time.Minute
 	httpTimeout = 20 * time.Second
 )
 
@@ -98,10 +98,10 @@ func fetch(ctx context.Context) (catalog, error) {
 
 // Result reports what happened during an enrichment run.
 type Result struct {
-	Matched   int      `json:"matched"`
-	Missed    []string `json:"missed,omitempty"`
-	Updated   int      `json:"updated"`
-	Total     int      `json:"total"`
+	Matched int      `json:"matched"`
+	Missed  []string `json:"missed,omitempty"`
+	Updated int      `json:"updated"`
+	Total   int      `json:"total"`
 }
 
 // Enrich fills missing model_meta fields (pricing, multimodal, note with
