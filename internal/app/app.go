@@ -334,10 +334,14 @@ func registerProviderRoutes(e *core.ServeEvent, pb *pocketbase.PocketBase) {
 		}
 		input.Slug = ev.Request.PathValue("slug")
 		s := store.New(pb)
-		if input.APIKey == "" {
-			existing, _ := s.GetProvider(input.Slug)
-			if existing != nil {
+		if existing, _ := s.GetProvider(input.Slug); existing != nil {
+			// Empty key and missing variants preserve the stored vendor
+			// configuration (partial-update semantics, matching the Web UI).
+			if input.APIKey == "" {
 				input.APIKey = existing.APIKey
+			}
+			if len(input.Variants) == 0 {
+				input.Variants = existing.Variants
 			}
 		}
 		provider, err := s.UpsertProvider(input)

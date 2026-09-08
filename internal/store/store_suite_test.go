@@ -340,3 +340,45 @@ var _ = Describe("legacy vendor normalization", func() {
 		Expect(provider.APIKey).To(Equal("k"))
 	})
 })
+
+var _ = Describe("model metadata (pricing / multimodal annotations)", func() {
+	var s *Store
+
+	BeforeEach(func() {
+		s = newTestStore()
+	})
+
+	It("persists per-model meta through provider upsert", func() {
+		_, err := s.UpsertProvider(Provider{
+			Slug: "openai", Name: "OpenAI", BaseURL: "https://api.openai.com/v1",
+			APIProtocol: "openai_chat", DefaultModel: "gpt-4o",
+			Models: []string{"gpt-4o", "gpt-4o-mini"},
+			ModelMeta: map[string]ModelMeta{
+				"gpt-4o": {InputPrice: "$2.5 / 1M in", OutputPrice: "$10 / 1M out", Multimodal: true},
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		loaded, err := s.GetProvider("openai")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(loaded.ModelMeta["gpt-4o"].InputPrice).To(Equal("$2.5 / 1M in"))
+		Expect(loaded.ModelMeta["gpt-4o"].Multimodal).To(BeTrue())
+		Expect(loaded.ModelMeta).To(HaveKey("gpt-4o"))
+	})
+
+	It("drops meta when the model is removed", func() {
+		p, err := s.UpsertProvider(Provider{
+			Slug: "x", Name: "X", BaseURL: "https://x.test/v1",
+			APIProtocol: "openai_chat", DefaultModel: "m1", Models: []string{"m1", "m2"},
+			ModelMeta: map[string]ModelMeta{"m1": {Multimodal: true}, "m2": {Note: "cheap"}},
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(p.Slug).To(Equal("x"))
+
+		after, err := s.RemoveModel("x", "m1")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(after.Models).To(Equal([]string{"m2"}))
+		Expect(after.ModelMeta).NotTo(HaveKey("m1"))
+		Expect(after.ModelMeta).To(HaveKey("m2"))
+	})
+})

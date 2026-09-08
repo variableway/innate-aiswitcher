@@ -79,6 +79,9 @@ func (s *Store) UpsertProvider(input Provider) (*Provider, error) {
 	} else {
 		record.Set("models", []string{})
 	}
+	if input.ModelMeta != nil {
+		record.Set("model_meta", input.ModelMeta)
+	}
 	if len(input.Variants) > 0 {
 		record.Set("variants", nonNilVariantMap(input.Variants))
 	} else {
@@ -191,6 +194,12 @@ func (s *Store) RemoveModel(slug, model string) (*Provider, error) {
 		return provider, nil
 	}
 	provider.Models = remaining
+	if provider.ModelMeta != nil {
+		delete(provider.ModelMeta, model)
+		if len(provider.ModelMeta) == 0 {
+			provider.ModelMeta = nil
+		}
+	}
 	if provider.DefaultModel == model {
 		provider.DefaultModel = ""
 		if len(remaining) > 0 {
@@ -545,6 +554,7 @@ func recordToProvider(record *core.Record) *Provider {
 		APIProtocol:  record.GetString("api_protocol"),
 		DefaultModel: record.GetString("default_model"),
 		Models:       decodeJSONSlice[string](record.Get("models")),
+		ModelMeta:    decodeJSONMap[map[string]ModelMeta](record.Get("model_meta")),
 		Variants:     decodeJSONMap[map[string]ProviderVariant](record.Get("variants")),
 		Headers:      decodeJSONMap[map[string]string](record.Get("headers")),
 		Endpoints:    decodeJSONMap[map[string]string](record.Get("endpoints")),

@@ -302,6 +302,19 @@ const dict = {
   'configs.previewError': { zh: '生成失败：{msg}', en: 'Preview failed: {msg}' },
   'configs.diskTitle': { zh: '磁盘上的当前配置', en: 'Current on-disk configs' },
 
+  // model meta editor
+  'meta.title': { zh: '模型信息', en: 'Model info' },
+  'meta.inputPrice': { zh: '输入价格', en: 'Input price' },
+  'meta.outputPrice': { zh: '输出价格', en: 'Output price' },
+  'meta.priceHint': { zh: '自由填写，如 ¥4 / 1M tokens', en: 'free-form, e.g. $2.5 / 1M tokens' },
+  'meta.multimodal': { zh: '多模态（图片/视觉）', en: 'Multimodal (vision)' },
+  'meta.note': { zh: '备注', en: 'Note' },
+  'meta.save': { zh: '保存', en: 'Save' },
+  'meta.saved': { zh: '模型信息已保存', en: 'Model info saved' },
+  'meta.confirmDelete': { zh: '确认删除', en: 'Confirm' },
+  'meta.deleteHint': { zh: '再点一次删除 {model}', en: 'Click again to remove {model}' },
+  'meta.editHint': { zh: '点击模型名编辑价格 / 多模态等信息', en: 'Click a model to edit pricing / modality' },
+
   // model combobox
   'models.fetch': { zh: '从 API 获取模型列表', en: 'Fetch model list from API' },
   'models.fetchFailed': { zh: '获取模型列表失败', en: 'Failed to fetch models' },

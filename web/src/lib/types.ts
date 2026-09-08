@@ -13,6 +13,8 @@ export interface Provider {
   api_protocol: string
   default_model?: string
   models?: string[]
+  /** Per-model annotations the vendor APIs do not expose (pricing, modality, notes). */
+  model_meta?: Record<string, ModelMeta>
   variants?: Record<string, ProviderVariant>
   notes?: string
   active: boolean
@@ -53,6 +55,8 @@ export interface Preset {
   name: string
   default_model?: string
   models?: string[]
+  /** Per-model annotations the vendor APIs do not expose (pricing, modality, notes). */
+  model_meta?: Record<string, ModelMeta>
   variants?: PresetVariant[]
   /** "builtin" presets ship in the binary; "user" presets are saved TOML files. */
   source?: 'builtin' | 'user'
@@ -70,6 +74,8 @@ export interface ModelsResult {
   status_code: number
   endpoint: string
   models?: string[]
+  /** Per-model annotations the vendor APIs do not expose (pricing, modality, notes). */
+  model_meta?: Record<string, ModelMeta>
   message: string
 }
 
@@ -263,4 +269,11 @@ wire_api = "chat"
 `,
     },
   ],
+}
+
+export interface ModelMeta {
+  input_price?: string
+  output_price?: string
+  multimodal?: boolean
+  note?: string
 }

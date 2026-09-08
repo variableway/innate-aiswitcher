@@ -2,6 +2,16 @@ package store
 
 import "encoding/json"
 
+// ModelMeta carries per-model annotations the vendor APIs do not provide:
+// pricing (free-form strings, e.g. "$4 / 1M tokens"), a multimodal flag and
+// a free-form note. Maintained locally on the provider row.
+type ModelMeta struct {
+	InputPrice  string `json:"input_price,omitempty" toml:"input_price,omitempty"`
+	OutputPrice string `json:"output_price,omitempty" toml:"output_price,omitempty"`
+	Multimodal  bool   `json:"multimodal,omitempty" toml:"multimodal,omitempty"`
+	Note        string `json:"note,omitempty" toml:"note,omitempty"`
+}
+
 // ProviderVariant is a protocol-specific endpoint configuration of a vendor
 // provider. A vendor (e.g. MiniMax) stores one API key and one variant per
 // wire protocol it serves; agents resolve the variant matching their adapter.
@@ -20,6 +30,7 @@ type Provider struct {
 	APIProtocol  string                     `json:"api_protocol" toml:"api_protocol"`
 	DefaultModel string                     `json:"default_model,omitempty" toml:"default_model,omitempty"`
 	Models       []string                   `json:"models,omitempty" toml:"models,omitempty"`
+	ModelMeta    map[string]ModelMeta       `json:"model_meta,omitempty" toml:"model_meta,omitempty"`
 	Variants     map[string]ProviderVariant `json:"variants,omitempty" toml:"variants,omitempty"`
 	Headers      map[string]string          `json:"headers,omitempty" toml:"headers,omitempty"`
 	Endpoints    map[string]string          `json:"endpoints,omitempty" toml:"endpoints,omitempty"`
