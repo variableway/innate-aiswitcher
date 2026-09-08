@@ -7,12 +7,13 @@ import '@xterm/xterm/css/xterm.css'
 export interface TerminalSession {
   id: string
   title: string
+  /** Optional command sent to the PTY right after the socket opens. */
+  command?: string
 }
 
 interface Props {
   session: TerminalSession
   active: boolean
-  initialCommand?: string
   onExit?: (id: string) => void
 }
 
@@ -25,7 +26,7 @@ interface Props {
  * - client → server binary frames: raw stdin bytes
  * - server → client binary frames: raw PTY output
  */
-export function XtermConsole({ session, active, initialCommand, onExit }: Props) {
+export function XtermConsole({ session, active, onExit }: Props) {
   const { t } = useI18n()
   const closedLabel = t('terminal.closed')
   const holderRef = useRef<HTMLDivElement>(null)
@@ -66,8 +67,8 @@ export function XtermConsole({ session, active, initialCommand, onExit }: Props)
         if (ws.readyState === WebSocket.OPEN) ws.send(data)
       })
       term.onResize(sendResize)
-      if (initialCommand) {
-        ws.send(initialCommand.endsWith('\n') ? initialCommand : initialCommand + '\n')
+      if (session.command) {
+        ws.send(session.command.endsWith('\n') ? session.command : session.command + '\n')
       }
       term.focus()
     }

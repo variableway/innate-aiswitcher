@@ -1,4 +1,4 @@
-import { createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
+import { createRootRoute, createRoute, createRouter, Navigate } from '@tanstack/react-router'
 import { AppShell } from '@/components/app-shell'
 import { ProvidersPage } from '@/pages/providers'
 import { ProfilesPage } from '@/pages/profiles'
@@ -55,7 +55,7 @@ const marketRoute = createRoute({
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: () => <ProvidersPage />,
+  component: () => <Navigate to="/providers" />,
 })
 
 const routeTree = rootRoute.addChildren([indexRoute, agentsRoute, providersRoute, profilesRoute, terminalRoute, configsRoute, marketRoute])

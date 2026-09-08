@@ -10,28 +10,41 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import { PageHeader } from '@/components/page-header'
 import { XtermConsole, type TerminalSession } from '@/components/terminal/xterm-console'
 import { useProviders } from '@/lib/queries'
 import { useI18n } from '@/lib/i18n'
 import { providerAgents } from '@/lib/types'
 
-interface SessionInit {
-  title: string
-  command?: string
-}
+type SessionInit = Pick<TerminalSession, 'title' | 'command'>
 
 export function TerminalPage() {
   const [sessions, setSessions] = useState<TerminalSession[]>([])
-  const [initializers, setInitializers] = useState<Record<string, string | undefined>>({})
+  /** Sessions whose process already exited — safe to close without asking. */
+  const [exited, setExited] = useState<Record<string, boolean>>({})
   const [active, setActive] = useState<string>('')
+  const [closing, setClosing] = useState<TerminalSession | null>(null)
   const { data: providers = [] } = useProviders()
   const { t } = useI18n()
 
   const spawn = (init: SessionInit) => {
+    // Auto-number duplicate tab titles: shell, shell #2, shell #3…
+    const sameBase = sessions.filter(
+      (s) => s.title === init.title || s.title.startsWith(`${init.title} #`)
+    )
+    const title = sameBase.length === 0 ? init.title : `${init.title} #${sameBase.length + 1}`
     const id = `t-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-    setSessions((prev) => [...prev, { id, title: init.title }])
-    setInitializers((prev) => ({ ...prev, [id]: init.command }))
+    setSessions((prev) => [...prev, { id, title, command: init.command }])
     setActive(id)
   }
 
@@ -45,6 +58,17 @@ export function TerminalPage() {
       }
       return next
     })
+    setExited((prev) => {
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
+    setClosing((cur) => (cur?.id === id ? null : cur))
+  }
+
+  const requestClose = (session: TerminalSession) => {
+    if (exited[session.id]) close(session.id)
+    else setClosing(session)
   }
 
   const quickLaunches: SessionInit[] = providers.flatMap((p) =>
@@ -56,79 +80,92 @@ export function TerminalPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <header className="border-b flex items-center justify-between gap-2 px-6 py-3">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <h1 className="flex items-center gap-2 text-lg font-semibold">
-            <SquareTerminal className="size-5" />
-            {t('terminal.title')}
-          </h1>
-          <p className="text-muted-foreground text-sm">{t('terminal.subtitle')}</p>
-        </div>
-        <div className="flex gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">
-                {t('terminal.launch')}
-                <ChevronDown data-icon="inline-end" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuLabel>aisw start</DropdownMenuLabel>
-              <DropdownMenuGroup>
-                {quickLaunches.length === 0 && (
-                  <DropdownMenuItem disabled>{t('terminal.noProviders')}</DropdownMenuItem>
-                )}
-                {quickLaunches.map((launch) => (
-                  <DropdownMenuItem
-                    key={launch.title}
-                    onClick={() => spawn(launch)}
-                    className="font-mono text-xs"
-                  >
-                    {launch.command}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => spawn({ title: 'shell' })}>
-                {t('terminal.plainShell')}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button onClick={() => spawn({ title: 'shell' })}>
-            <Plus data-icon="inline-start" />
-            {t('terminal.new')}
-          </Button>
-        </div>
-      </header>
+      <PageHeader
+        icon={SquareTerminal}
+        title={t('terminal.title')}
+        subtitle={t('terminal.subtitle')}
+        actions={
+          <>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  {t('terminal.launch')}
+                  <ChevronDown data-icon="inline-end" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuLabel>aisw start</DropdownMenuLabel>
+                <DropdownMenuGroup>
+                  {quickLaunches.length === 0 && (
+                    <DropdownMenuItem disabled>{t('terminal.noProviders')}</DropdownMenuItem>
+                  )}
+                  {quickLaunches.map((launch) => (
+                    <DropdownMenuItem
+                      key={launch.title}
+                      onClick={() => spawn(launch)}
+                      className="font-mono text-xs"
+                    >
+                      {launch.command}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => spawn({ title: 'shell' })}>
+                  {t('terminal.plainShell')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button onClick={() => spawn({ title: 'shell' })}>
+              <Plus data-icon="inline-start" />
+              {t('terminal.new')}
+            </Button>
+          </>
+        }
+      />
 
       {sessions.length === 0 ? (
         <div className="flex flex-1 items-center justify-center p-6">
-          <div className="text-muted-foreground flex max-w-md flex-col items-center gap-3 text-center">
-            <SquareTerminal className="size-10" />
-            <p className="text-sm">{t('terminal.empty.desc')}</p>
-            <Button variant="outline" onClick={() => spawn({ title: 'shell' })}>
-              <Plus data-icon="inline-start" />
-              {t('terminal.open')}
-            </Button>
-          </div>
+          <Empty className="max-w-md">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <SquareTerminal />
+              </EmptyMedia>
+              <EmptyTitle>{t('terminal.title')}</EmptyTitle>
+              <EmptyDescription>{t('terminal.empty.desc')}</EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button variant="outline" onClick={() => spawn({ title: 'shell' })}>
+                <Plus data-icon="inline-start" />
+                {t('terminal.open')}
+              </Button>
+            </EmptyContent>
+          </Empty>
         </div>
       ) : (
         <Tabs value={active} onValueChange={setActive} className="flex min-h-0 flex-1 flex-col">
-          <TabsList className="m-3 mb-0 w-fit">
+          <TabsList className="m-3 mb-0 w-fit max-w-full overflow-x-auto">
             {sessions.map((session) => (
               <TabsTrigger key={session.id} value={session.id} className="gap-1.5">
                 <span className="font-mono text-xs">{session.title}</span>
-                <button
-                  type="button"
+                <span
+                  role="button"
+                  tabIndex={0}
                   aria-label={t('terminal.close', { name: session.title })}
                   className="hover:text-destructive -mr-1 cursor-pointer rounded-sm"
                   onClick={(e) => {
                     e.stopPropagation()
-                    close(session.id)
+                    requestClose(session)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.stopPropagation()
+                      e.preventDefault()
+                      requestClose(session)
+                    }
                   }}
                 >
                   <X data-icon="inline-end" />
-                </button>
+                </span>
               </TabsTrigger>
             ))}
           </TabsList>
@@ -138,13 +175,24 @@ export function TerminalPage() {
                 <XtermConsole
                   session={session}
                   active={session.id === active}
-                  initialCommand={initializers[session.id]}
+                  onExit={(id) => setExited((prev) => ({ ...prev, [id]: true }))}
                 />
               </div>
             ))}
           </div>
         </Tabs>
       )}
+
+      <ConfirmDialog
+        open={closing !== null}
+        onOpenChange={(open) => !open && setClosing(null)}
+        title={t('terminal.closeConfirm.title')}
+        description={
+          closing ? t('terminal.closeConfirm.desc', { name: closing.title }) : undefined
+        }
+        confirmLabel={t('terminal.closeConfirm.confirm')}
+        onConfirm={() => closing && close(closing.id)}
+      />
     </div>
   )
 }

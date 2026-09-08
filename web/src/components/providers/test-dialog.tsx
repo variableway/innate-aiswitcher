@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,6 +20,7 @@ import {
 import { Spinner } from '@/components/ui/spinner'
 import { useTestProvider } from '@/lib/queries'
 import { useI18n } from '@/lib/i18n'
+import { cn } from '@/lib/utils'
 
 interface Props {
   slug: string
@@ -33,6 +34,15 @@ export function TestDialog({ slug, defaultModel, models, open, onOpenChange }: P
   const [model, setModel] = useState<string>(defaultModel ?? '')
   const testMutation = useTestProvider()
   const { t } = useI18n()
+
+  // The dialog stays mounted: resync the model and stale results on each open.
+  useEffect(() => {
+    if (open) {
+      setModel(defaultModel ?? '')
+      testMutation.reset()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, defaultModel])
 
   const run = () => {
     testMutation.mutate(
@@ -77,9 +87,10 @@ export function TestDialog({ slug, defaultModel, models, open, onOpenChange }: P
 
         {testMutation.data && (
           <pre
-            className={`max-h-56 overflow-auto rounded-lg border p-3 font-mono text-xs ${
-              testMutation.data.ok ? '' : 'text-destructive'
-            }`}
+            className={cn(
+              'max-h-56 overflow-auto rounded-lg border p-3 font-mono text-xs',
+              !testMutation.data.ok && 'text-destructive'
+            )}
           >
             {JSON.stringify(testMutation.data, null, 2)}
           </pre>

@@ -59,6 +59,10 @@ export const api = {
     }),
   removeModel: (slug: string, model: string) =>
     request<Provider>(`/providers/${slug}/models/${model}`, { method: 'DELETE' }),
+  enrichModels: (slug: string) =>
+    request<{ ok: boolean; provider: Provider; result: { matched: number; missed?: string[]; updated: number; total: number } }>(
+      `/providers/${slug}/models/enrich`, { method: 'POST' }
+    ),
 
   testProvider: (slug: string, model?: string) =>
     request<TestResult>(`/providers/${slug}/test`, {

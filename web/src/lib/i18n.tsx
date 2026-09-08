@@ -5,10 +5,12 @@ export type Lang = 'zh' | 'en'
 const dict = {
   // shell
   'app.tagline': { zh: '厂商切换器', en: 'provider switcher' },
-  'app.agents': { zh: 'claude code · codex · opencode', en: 'claude code · codex · opencode' },
-  'nav.agents': { zh: 'Agent', en: 'Agents' },
-  'nav.providers': { zh: 'Provider', en: 'Providers' },
-  'nav.profiles': { zh: 'Profile', en: 'Profiles' },
+  'app.menu': { zh: '打开导航菜单', en: 'Open navigation menu' },
+  'theme.toDark': { zh: '切换到暗色模式', en: 'Switch to dark mode' },
+  'theme.toLight': { zh: '切换到亮色模式', en: 'Switch to light mode' },
+  'nav.agents': { zh: '智能体', en: 'Agents' },
+  'nav.providers': { zh: '服务商', en: 'Providers' },
+  'nav.profiles': { zh: '配置档', en: 'Profiles' },
   'nav.terminal': { zh: '终端', en: 'Terminal' },
   'nav.configs': { zh: '配置文件', en: 'Configs' },
   'nav.market': { zh: '模型市场', en: 'Model Market' },
@@ -70,6 +72,11 @@ const dict = {
   'market.disabled': { zh: '已下线', en: 'offline' },
   'market.noProviders': { zh: '还没有可导入的厂商 Provider', en: 'No vendor providers to import into yet' },
 
+  // common
+  'common.cancel': { zh: '取消', en: 'Cancel' },
+  'common.confirm': { zh: '确认', en: 'Confirm' },
+  'common.delete': { zh: '删除', en: 'Delete' },
+
   // agents page
   'agents.title': { zh: 'AI Agent', en: 'AI Agents' },
   'agents.subtitle': {
@@ -77,12 +84,23 @@ const dict = {
     en: 'Detects installed agent tools; each agent ships settings templates you can copy or write to disk.',
   },
   'agents.installed': { zh: '已安装', en: 'installed' },
+  'agents.loadFailed': { zh: '加载 Agent 失败', en: 'Failed to load agents' },
   'agents.notInstalled': { zh: '未安装', en: 'not installed' },
   'agents.installHint': { zh: '安装：', en: 'Install:' },
+  'agents.installHintUnknown': {
+    zh: '请参考该工具的官方文档安装',
+    en: 'see the official docs of this tool to install',
+  },
   'agents.templates': { zh: '设置模板', en: 'Settings templates' },
   'agents.copy': { zh: '复制', en: 'Copy' },
   'agents.copied': { zh: '已复制到剪贴板', en: 'Copied to clipboard' },
   'agents.writeDisk': { zh: '写入磁盘', en: 'Write to disk' },
+  'agents.writeConfirm.title': { zh: '写入配置模板', en: 'Write template to disk' },
+  'agents.writeConfirm.desc': {
+    zh: '将覆盖磁盘上的以下文件：',
+    en: 'This will overwrite the following file on disk:',
+  },
+  'agents.writeConfirm.confirm': { zh: '写入', en: 'Write' },
   'agents.written': { zh: '{file} 模板已写入磁盘', en: '{file} template written to disk' },
   'agents.templateHint': {
     zh: '模板中的 <占位符> 需替换为厂商的 Base URL、API Key 与模型；「配置文件」页的生成器可自动填充。',
@@ -97,7 +115,7 @@ const dict = {
   },
 
   // providers page
-  'providers.title': { zh: 'LLM Provider', en: 'LLM Providers' },
+  'providers.title': { zh: '模型服务商', en: 'LLM Providers' },
   'providers.subtitle': {
     zh: '每个厂商（LLM Provider）只维护一把 API Key 和模型列表；与具体 Agent 无关。',
     en: 'Each vendor (LLM provider) is just an API key plus its model list — agent-agnostic.',
@@ -129,6 +147,11 @@ const dict = {
   'models.placeholder': { zh: '模型名，如 glm-5.3', en: 'model name, e.g. glm-5.3' },
   'models.addBtn': { zh: '添加', en: 'Add' },
   'models.remove': { zh: '移除模型 {model}', en: 'Remove model {model}' },
+  'models.removeDefault.title': { zh: '移除默认模型', en: 'Remove default model' },
+  'models.removeDefault.desc': {
+    zh: '「{model}」是默认模型，移除后将回退到模型列表中的第一个模型。',
+    en: '"{model}" is the default model; removing it falls back to the first model in the list.',
+  },
   'models.default': { zh: '默认模型：{model}', en: 'default model: {model}' },
   'models.added': { zh: '模型「{model}」已添加', en: 'Model "{model}" added' },
   'models.addedDesc': { zh: '与 {slug} 的 API Key 共享。', en: 'Shares the {slug} API key.' },
@@ -166,6 +189,12 @@ const dict = {
   'providerForm.defaultModelHint': { zh: '留空取第一个模型', en: 'first model when empty' },
   'providerForm.protocol': { zh: '协议（高级）', en: 'Protocol (advanced)' },
   'providerForm.baseUrl': { zh: '端点 Base URL（高级）', en: 'Endpoint base URL (advanced)' },
+  'providerForm.notes': { zh: '备注', en: 'Notes' },
+  'providerForm.active': { zh: '启用', en: 'Active' },
+  'providerForm.activeDesc': {
+    zh: '停用后不参与配置生成与 Agent 启动。',
+    en: 'Inactive providers are excluded from config building and agent launches.',
+  },
   'providerForm.cancel': { zh: '取消', en: 'Cancel' },
   'providerForm.save': { zh: '保存', en: 'Save' },
   'providerForm.created': { zh: 'Provider 已创建', en: 'Provider created' },
@@ -183,6 +212,10 @@ const dict = {
   'preset.builtin': { zh: '内置', en: 'builtin' },
   'preset.user': { zh: '自定义', en: 'custom' },
   'preset.delete': { zh: '删除自定义预设', en: 'Delete custom preset' },
+  'preset.deleteConfirm.desc': {
+    zh: '删除自定义预设「{name}」？此操作不可撤销，已导入的 Provider 不受影响。',
+    en: 'Delete custom preset "{name}"? This cannot be undone; imported providers are not affected.',
+  },
   'preset.importFile': { zh: '导入 TOML 文件…', en: 'Import TOML file…' },
   'preset.importDone': { zh: '已从文件导入 {count} 个预设', en: 'Imported {count} preset(s) from file' },
   'preset.importFailed': { zh: '导入失败：{msg}', en: 'Import failed: {msg}' },
@@ -192,6 +225,10 @@ const dict = {
     en: 'One API key serves claude code, codex and opencode.',
   },
   'preset.importFailedShort': { zh: '导入失败：{msg}', en: 'Import failed: {msg}' },
+  'preset.importHint': {
+    zh: '需先选择预设并填写 API Key',
+    en: 'Select a preset and enter an API key first',
+  },
   'preset.apiKey': { zh: 'API Key', en: 'API key' },
   'preset.apiKeyPlaceholder': {
     zh: '所有模型与 Agent 共用一把 Key',
@@ -217,7 +254,7 @@ const dict = {
   'test.default': { zh: '（默认）', en: ' (default)' },
 
   // profiles page
-  'profiles.title': { zh: 'Agent Profile', en: 'Agent Profiles' },
+  'profiles.title': { zh: 'Agent 配置档', en: 'Agent Profiles' },
   'profiles.subtitle': {
     zh: '可选的 per-Agent 绑定 —— 模型覆盖、启动参数、默认标记。',
     en: 'Optional per-agent bindings — model overrides, launch args, defaults.',
@@ -275,14 +312,27 @@ const dict = {
     zh: '直接查看、编辑并保存 claude code / codex / opencode 的本地配置文件。',
     en: 'View, edit and save the local config files of claude code / codex / opencode.',
   },
+  'configs.tabBuilder': { zh: '生成器', en: 'Builder' },
+  'configs.tabDisk': { zh: '磁盘文件', en: 'On-disk files' },
   'configs.notExists': { zh: '文件尚不存在，保存后将创建。', en: 'File does not exist yet; saving creates it.' },
   'configs.save': { zh: '保存', en: 'Save' },
   'configs.saved': { zh: '{file} 已保存', en: '{file} saved' },
   'configs.reload': { zh: '重载', en: 'Reload' },
+  'configs.reloadConfirm.title': { zh: '放弃未保存的修改？', en: 'Discard unsaved changes?' },
+  'configs.reloadConfirm.desc': {
+    zh: '重载将丢弃你对 {file} 的未保存修改。',
+    en: 'Reloading discards your unsaved edits to {file}.',
+  },
   'configs.loadFailed': { zh: '加载配置失败', en: 'Failed to load configs' },
   'configs.hint': {
     zh: '编辑会直接写入磁盘（原子写入，权限 0600）。auth.json 中包含 API Key，请谨慎分享。',
     en: 'Edits write straight to disk (atomic, mode 0600). auth.json contains API keys — share with care.',
+  },
+  'configs.showSecrets': { zh: '显示密钥', en: 'Show secrets' },
+  'configs.hideSecrets': { zh: '隐藏密钥', en: 'Hide secrets' },
+  'configs.maskedHint': {
+    zh: '密钥已遮罩（只读），点击眼睛图标显示原文后再编辑。',
+    en: 'Secrets are masked (read-only); click the eye icon to reveal before editing.',
   },
 
   // config preview
@@ -293,6 +343,11 @@ const dict = {
   },
   'configs.agent': { zh: 'Agent', en: 'Agent' },
   'configs.apply': { zh: '写入磁盘', en: 'Write to disk' },
+  'configs.applyConfirm.title': { zh: '写入配置到磁盘', en: 'Write config to disk' },
+  'configs.applyConfirm.desc': {
+    zh: '将覆盖以下文件（原子写入，权限 0600）：',
+    en: 'The following files will be overwritten (atomic, mode 0600):',
+  },
   'configs.applied': { zh: '配置已写入磁盘', en: 'Config written to disk' },
   'configs.applyFailed': { zh: '写入失败：{msg}', en: 'Write failed: {msg}' },
   'configs.envOnly': { zh: '环境变量（启动时注入，无配置文件）', en: 'Env vars (injected at launch, no config file)' },
@@ -314,6 +369,17 @@ const dict = {
   'meta.confirmDelete': { zh: '确认删除', en: 'Confirm' },
   'meta.deleteHint': { zh: '再点一次删除 {model}', en: 'Click again to remove {model}' },
   'meta.editHint': { zh: '点击模型名编辑价格 / 多模态等信息', en: 'Click a model to edit pricing / modality' },
+
+  // model catalog enrichment
+  'models.enrich': { zh: '从模型库补全', en: 'Enrich from catalog' },
+  'models.enrichDone': {
+    zh: '已补全 {updated}/{matched} 个模型的信息（价格 / 多模态 / 上下文）',
+    en: 'Enriched {updated}/{matched} models (pricing / modality / context)',
+  },
+  'models.enrichMissed': {
+    zh: '未收录：{missed}',
+    en: 'Not in catalog: {missed}',
+  },
 
   // model combobox
   'models.fetch': { zh: '从 API 获取模型列表', en: 'Fetch model list from API' },
@@ -343,6 +409,12 @@ const dict = {
   },
   'terminal.open': { zh: '打开终端', en: 'Open terminal' },
   'terminal.close': { zh: '关闭 {name}', en: 'Close {name}' },
+  'terminal.closeConfirm.title': { zh: '关闭终端会话', en: 'Close terminal session' },
+  'terminal.closeConfirm.desc': {
+    zh: '「{name}」中的进程仍在运行，关闭将终止该进程。',
+    en: 'A process in "{name}" is still running; closing will terminate it.',
+  },
+  'terminal.closeConfirm.confirm': { zh: '关闭并终止', en: 'Close & kill' },
   'terminal.closed': { zh: '—— 会话已结束 ——', en: '—— session closed ——' },
 } as const
 

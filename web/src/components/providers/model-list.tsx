@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Check, Eye, Plus, X } from 'lucide-react'
+import { Check, DatabaseZap, Eye, Plus, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,7 +13,9 @@ import {
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { useAddModel, useRemoveModel } from '@/lib/queries'
+import { api } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
 import type { ModelMeta, Provider } from '@/lib/types'
 
@@ -29,7 +31,27 @@ export function ModelList({ provider }: { provider: Provider }) {
   const addMutation = useAddModel(provider.slug)
   const removeMutation = useRemoveModel(provider.slug)
   const [confirming, setConfirming] = useState<string | null>(null)
+  const [defaultRemove, setDefaultRemove] = useState<string | null>(null)
+  const [enriching, setEnriching] = useState(false)
+  const qc = useQueryClient()
   const models = provider.models ?? []
+
+  const enrich = async () => {
+    setEnriching(true)
+    try {
+      const res = await api.enrichModels(provider.slug)
+      toast.success(t('models.enrichDone', { updated: res.result.updated, matched: res.result.matched }), {
+        description: res.result.missed?.length
+          ? t('models.enrichMissed', { missed: res.result.missed.join(', ') })
+          : undefined,
+      })
+      await qc.invalidateQueries({ queryKey: ['providers'] })
+    } catch (err) {
+      toast.error((err as Error).message)
+    } finally {
+      setEnriching(false)
+    }
+  }
 
   const submit = () => {
     const name = model.trim()
@@ -46,6 +68,11 @@ export function ModelList({ provider }: { provider: Provider }) {
   }
 
   const remove = (m: string) => {
+    // Removing the default model has wider impact — ask with an AlertDialog.
+    if (m === provider.default_model) {
+      setDefaultRemove(m)
+      return
+    }
     if (confirming !== m) {
       setConfirming(m)
       return
@@ -89,19 +116,31 @@ export function ModelList({ provider }: { provider: Provider }) {
                 type="button"
                 aria-label={isConfirming ? t('meta.confirmDelete') : t('models.remove', { model: m })}
                 title={isConfirming ? t('meta.deleteHint', { model: m }) : t('models.remove', { model: m })}
-                className="hover:text-destructive -mr-1 ml-1 cursor-pointer rounded-sm"
+                className="hover:text-destructive ml-0.5 flex cursor-pointer items-center rounded-sm"
                 disabled={removeMutation.isPending}
                 onBlur={() => isConfirming && setConfirming(null)}
                 onClick={() => remove(m)}
               >
                 {isConfirming ? t('meta.confirmDelete') : ''}
-                <X data-icon="inline-end" />
+                <X className="size-3" />
               </button>
             </Badge>
           )
         })}
       </div>
       <p className="text-muted-foreground text-xs">{t('meta.editHint')}</p>
+      <div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground"
+          disabled={enriching || models.length === 0}
+          onClick={() => void enrich()}
+        >
+          <DatabaseZap data-icon="inline-start" />
+          {t('models.enrich')}
+        </Button>
+      </div>
       {adding ? (
         <div className="flex gap-2">
           <Input
@@ -139,6 +178,20 @@ export function ModelList({ provider }: { provider: Provider }) {
           {t('models.default', { model: provider.default_model })}
         </p>
       )}
+      <ConfirmDialog
+        open={defaultRemove !== null}
+        onOpenChange={(open) => !open && setDefaultRemove(null)}
+        title={t('models.removeDefault.title')}
+        description={
+          defaultRemove ? t('models.removeDefault.desc', { model: defaultRemove }) : undefined
+        }
+        confirmLabel={t('common.delete')}
+        pending={removeMutation.isPending}
+        onConfirm={() => {
+          if (!defaultRemove) return
+          removeMutation.mutate(defaultRemove, { onSuccess: () => setDefaultRemove(null) })
+        }}
+      />
     </div>
   )
 }

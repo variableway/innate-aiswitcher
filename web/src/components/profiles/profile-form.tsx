@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog'
 import {
   Field,
+  FieldContent,
   FieldDescription,
   FieldGroup,
   FieldLabel,
@@ -111,9 +112,7 @@ export function ProfileFormDialog({ open, onOpenChange, profile }: Props) {
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{profile ? t('profileForm.editTitle') : t('profileForm.addTitle')}</DialogTitle>
-          <DialogDescription>
-            t('profileForm.desc')
-          </DialogDescription>
+          <DialogDescription>{t('profileForm.desc')}</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit}>
           <FieldGroup>
@@ -221,13 +220,21 @@ export function ProfileFormDialog({ open, onOpenChange, profile }: Props) {
                 placeholder="--verbose"
               />
             </Field>
-            <div className="flex items-center justify-between rounded-lg border p-3">
-              <div className="flex flex-col">
-                <span className="text-sm font-medium">{t('profileForm.isDefault')}</span>
-                <span className="text-muted-foreground text-xs">{t('profileForm.isDefaultDesc')}</span>
-              </div>
-              <Switch checked={form.is_default} onCheckedChange={(v) => set('is_default', v)} />
-            </div>
+            <Field orientation="horizontal" className="rounded-lg border p-3">
+              <FieldContent>
+                <FieldLabel htmlFor="pr-is-default" className="flex-col items-start gap-0.5">
+                  <span className="text-sm font-medium">{t('profileForm.isDefault')}</span>
+                  <span className="text-muted-foreground text-xs font-normal">
+                    {t('profileForm.isDefaultDesc')}
+                  </span>
+                </FieldLabel>
+              </FieldContent>
+              <Switch
+                id="pr-is-default"
+                checked={form.is_default}
+                onCheckedChange={(v) => set('is_default', v)}
+              />
+            </Field>
           </FieldGroup>
           <DialogFooter className="mt-6">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

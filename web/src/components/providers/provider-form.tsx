@@ -8,7 +8,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -19,6 +25,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
+import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 import { useSaveProvider } from '@/lib/queries'
 import { useI18n } from '@/lib/i18n'
 import type { Provider } from '@/lib/types'
@@ -57,15 +65,25 @@ function initialState(p: Provider | null): FormState {
 
 export function ProviderFormDialog({ open, onOpenChange, provider }: Props) {
   const [form, setForm] = useState<FormState>(initialState(provider))
+  // Validation shows only after a field was touched or a submit was attempted.
+  const [touched, setTouched] = useState<Partial<Record<keyof FormState, boolean>>>({})
+  const [submitAttempted, setSubmitAttempted] = useState(false)
   const saveMutation = useSaveProvider(provider?.slug ?? null)
   const { t } = useI18n()
 
   useEffect(() => {
-    if (open) setForm(initialState(provider))
+    if (open) {
+      setForm(initialState(provider))
+      setTouched({})
+      setSubmitAttempted(false)
+    }
   }, [open, provider])
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }))
+  const touch = (key: keyof FormState) => setTouched((prev) => ({ ...prev, [key]: true }))
+  const showInvalid = (key: keyof FormState, invalid: boolean) =>
+    (touched[key] || submitAttempted) && invalid
 
   const models = form.models
     .split(',')
@@ -73,11 +91,17 @@ export function ProviderFormDialog({ open, onOpenChange, provider }: Props) {
     .filter(Boolean)
 
   const isVendor = Boolean(provider?.variants && Object.keys(provider.variants).length > 0)
-  const invalid = !form.slug.trim() || !form.base_url.trim() || models.length === 0
+  const slugInvalid = !form.slug.trim()
+  const modelsInvalid = models.length === 0
+  const baseUrlInvalid = !form.base_url.trim()
+  const invalid = slugInvalid || baseUrlInvalid || modelsInvalid
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (invalid) return
+    if (invalid) {
+      setSubmitAttempted(true)
+      return
+    }
     saveMutation.mutate(
       {
         slug: form.slug.trim(),
@@ -110,13 +134,14 @@ export function ProviderFormDialog({ open, onOpenChange, provider }: Props) {
         <form onSubmit={submit}>
           <FieldGroup>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field data-invalid={form.slug.trim() ? undefined : true}>
+              <Field data-invalid={showInvalid('slug', slugInvalid) || undefined}>
                 <FieldLabel htmlFor="p-slug">{t('providerForm.slug')}</FieldLabel>
                 <Input
                   id="p-slug"
                   value={form.slug}
                   onChange={(e) => set('slug', e.target.value)}
-                  aria-invalid={!form.slug.trim()}
+                  onBlur={() => touch('slug')}
+                  aria-invalid={showInvalid('slug', slugInvalid)}
                   placeholder="glm"
                 />
               </Field>
@@ -145,13 +170,14 @@ export function ProviderFormDialog({ open, onOpenChange, provider }: Props) {
               />
               <FieldDescription>{t('providerForm.apiKeyDesc')}</FieldDescription>
             </Field>
-            <Field data-invalid={models.length === 0 ? true : undefined}>
+            <Field data-invalid={showInvalid('models', modelsInvalid) || undefined}>
               <FieldLabel htmlFor="p-models">{t('providerForm.models')}</FieldLabel>
               <Input
                 id="p-models"
                 value={form.models}
                 onChange={(e) => set('models', e.target.value)}
-                aria-invalid={models.length === 0}
+                onBlur={() => touch('models')}
+                aria-invalid={showInvalid('models', modelsInvalid)}
                 placeholder="glm-5.2, glm-5.3"
               />
               <FieldDescription>{t('providerForm.modelsDesc')}</FieldDescription>
@@ -182,15 +208,40 @@ export function ProviderFormDialog({ open, onOpenChange, provider }: Props) {
                 </Select>
               </Field>
             </div>
-            <Field data-invalid={form.base_url.trim() ? undefined : true}>
+            <Field data-invalid={showInvalid('base_url', baseUrlInvalid) || undefined}>
               <FieldLabel htmlFor="p-base-url">{t('providerForm.baseUrl')}</FieldLabel>
               <Input
                 id="p-base-url"
                 type="url"
                 value={form.base_url}
                 onChange={(e) => set('base_url', e.target.value)}
-                aria-invalid={!form.base_url.trim()}
+                onBlur={() => touch('base_url')}
+                aria-invalid={showInvalid('base_url', baseUrlInvalid)}
                 placeholder="https://api.example.com/v1"
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="p-notes">{t('providerForm.notes')}</FieldLabel>
+              <Textarea
+                id="p-notes"
+                value={form.notes}
+                onChange={(e) => set('notes', e.target.value)}
+                rows={2}
+              />
+            </Field>
+            <Field orientation="horizontal" className="rounded-lg border p-3">
+              <FieldContent>
+                <FieldLabel htmlFor="p-active" className="flex-col items-start gap-0.5">
+                  <span className="text-sm font-medium">{t('providerForm.active')}</span>
+                  <span className="text-muted-foreground text-xs font-normal">
+                    {t('providerForm.activeDesc')}
+                  </span>
+                </FieldLabel>
+              </FieldContent>
+              <Switch
+                id="p-active"
+                checked={form.active}
+                onCheckedChange={(v) => set('active', v)}
               />
             </Field>
           </FieldGroup>
@@ -198,7 +249,7 @@ export function ProviderFormDialog({ open, onOpenChange, provider }: Props) {
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               {t('providerForm.cancel')}
             </Button>
-            <Button type="submit" disabled={invalid || saveMutation.isPending}>
+            <Button type="submit" disabled={saveMutation.isPending}>
               {saveMutation.isPending && <Spinner data-icon="inline-start" />}
               {t('providerForm.save')}
             </Button>

@@ -28,6 +28,7 @@ import (
 	"github.com/variableway/innate-aiswitcher/internal/configfile"
 	"github.com/variableway/innate-aiswitcher/internal/httpcheck"
 	"github.com/variableway/innate-aiswitcher/internal/market"
+	"github.com/variableway/innate-aiswitcher/internal/modelcatalog"
 	"github.com/variableway/innate-aiswitcher/internal/projectconfig"
 	"github.com/variableway/innate-aiswitcher/internal/providerconfig"
 	"github.com/variableway/innate-aiswitcher/internal/store"
@@ -85,6 +86,7 @@ func NewCLI() *cobra.Command {
 	cmd.PersistentFlags().BoolVar(&opts.EnableAdminUI, "admin-ui", false, "enable the PocketBase admin UI at /_")
 	cmd.PersistentFlags().BoolVar(&opts.ShowAdminBanner, "show-admin-banner", false, "show the PocketBase startup banner and admin install URL")
 	cmd.PersistentFlags().StringVar(&opts.InitConfig, "init-config", "", "import config from a TOML file when the database is empty (defaults to "+configfile.InitConfigPath()+")")
+	cmd.PersistentFlags().BoolVar(&tui.Accessible, "accessible", false, "run the TUI in accessible (line-based) mode; HuhAccessible env var also works")
 	cmd.AddCommand(
 		providerCommand(getPB),
 		profileCommand(getPB),
@@ -129,6 +131,7 @@ func NewWithOptions(opts Options) *pocketbase.PocketBase {
 	pb.RootCmd.SilenceUsage = true
 	pb.RootCmd.PersistentFlags().Bool("admin-ui", opts.EnableAdminUI, "enable the PocketBase admin UI at /_")
 	pb.RootCmd.PersistentFlags().Bool("show-admin-banner", opts.ShowAdminBanner, "show the PocketBase startup banner and admin install URL")
+	pb.RootCmd.PersistentFlags().BoolVar(&tui.Accessible, "accessible", false, "run the TUI in accessible (line-based) mode; HuhAccessible env var also works")
 	pb.RootCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		return tui.Run(store.New(pb))
 	}
@@ -415,6 +418,26 @@ func registerProviderRoutes(e *core.ServeEvent, pb *pocketbase.PocketBase) {
 		return ev.JSON(http.StatusCreated, provider)
 	})
 
+	// Enrich model metadata (pricing / modality / context) from the open
+	// models.dev catalog; user-maintained values are never overwritten.
+	e.Router.POST("/api/aisw/providers/{slug}/models/enrich", func(ev *core.RequestEvent) error {
+		s := store.New(pb)
+		provider, err := s.GetProvider(ev.Request.PathValue("slug"))
+		if err != nil || provider == nil {
+			return ev.JSON(http.StatusNotFound, map[string]any{"ok": false, "message": "provider not found"})
+		}
+		enriched, result, err := modelcatalog.Enrich(ev.Request.Context(), *provider)
+		if err != nil {
+			return ev.JSON(http.StatusBadGateway, map[string]any{"ok": false, "message": err.Error()})
+		}
+		saved, err := s.UpsertProvider(enriched)
+		if err != nil {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": err.Error()})
+		}
+		saved.APIKey = maskAPIKey(saved.APIKey)
+		return ev.JSON(http.StatusOK, map[string]any{"ok": true, "provider": saved, "result": result})
+	})
+
 	// Remove a model from a provider's configured model list
 	e.Router.DELETE("/api/aisw/providers/{slug}/models/{model}", func(ev *core.RequestEvent) error {
 		s := store.New(pb)
@@ -669,14 +692,10 @@ func registerMarketRoutes(e *core.ServeEvent, pb *pocketbase.PocketBase) {
 	})
 }
 
+// maskAPIKey redacts secrets for terminal output — delegates to the tui
+// package so REST, CLI and TUI surfaces mask keys identically.
 func maskAPIKey(key string) string {
-	if key == "" {
-		return ""
-	}
-	if len(key) <= 8 {
-		return strings.Repeat("*", len(key))
-	}
-	return key[:4] + strings.Repeat("*", len(key)-8) + key[len(key)-4:]
+	return tui.MaskAPIKey(key)
 }
 
 func providerCommand(getPB PBGetter) *cobra.Command {
@@ -745,29 +764,12 @@ func providerCommand(getPB PBGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			out := cmd.OutOrStdout()
-			fmt.Fprintln(out, "# Saved providers")
-			for _, provider := range providers {
-				keyState := "missing"
-				if provider.APIKey != "" {
-					keyState = "set"
-				}
-				protocols := provider.APIProtocol
-				if len(provider.Variants) > 0 {
-					protocols = strings.Join(providerVariantProtocols(provider), ",")
-				}
-				models := provider.DefaultModel
-				if len(provider.Models) > 0 {
-					models = strings.Join(provider.Models, ",")
-				}
-				fmt.Fprintf(out, "%s\t%s\t%s\t%s\t%s\tkey=%s\n", provider.Slug, provider.Name, protocols, models, provider.BaseURL, keyState)
-			}
-			fmt.Fprintln(out)
-			fmt.Fprintln(out, "# Built-in presets")
+			tui.PrintProviders(providers)
 			presets, err := templates.ProviderPresets()
 			if err != nil {
 				return err
 			}
+			fmt.Fprintln(cmd.OutOrStdout())
 			tui.PrintPresets(presets)
 			return nil
 		},
@@ -889,9 +891,7 @@ func presetCommands(getPB PBGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			for _, preset := range presets {
-				fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\t%s\n", preset.Slug, preset.Name, strings.Join(preset.Models, ","), preset.Source)
-			}
+			tui.PrintSourcedPresets(presets)
 			return nil
 		},
 	}
@@ -931,14 +931,7 @@ func providerModelCommand(getPB PBGetter) *cobra.Command {
 			if err != nil || provider == nil {
 				return fmt.Errorf("provider not found: %s", args[0])
 			}
-			out := cmd.OutOrStdout()
-			for _, model := range provider.Models {
-				marker := ""
-				if model == provider.DefaultModel {
-					marker = " (default)"
-				}
-				fmt.Fprintf(out, "%s%s\n", model, marker)
-			}
+			tui.PrintModels(*provider)
 			return nil
 		},
 	}
@@ -985,16 +978,6 @@ func providerModelCommand(getPB PBGetter) *cobra.Command {
 
 	cmd.AddCommand(listCmd, addCmd, removeCmd)
 	return cmd
-}
-
-func providerVariantProtocols(provider store.Provider) []string {
-	protocols := make([]string, 0, len(provider.Variants))
-	for _, protocol := range []string{"anthropic", "openai_responses", "openai_chat"} {
-		if _, ok := provider.Variants[protocol]; ok {
-			protocols = append(protocols, protocol)
-		}
-	}
-	return protocols
 }
 
 func profileCommand(getPB PBGetter) *cobra.Command {
@@ -1055,9 +1038,7 @@ func profileCommand(getPB PBGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			for _, profile := range profiles {
-				fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\t%s\n", profile.Slug, profile.AgentSlug, profile.ProviderSlug, profile.Model)
-			}
+			tui.PrintProfiles(profiles)
 			return nil
 		},
 	}
@@ -1068,6 +1049,7 @@ func profileCommand(getPB PBGetter) *cobra.Command {
 
 func startCommand(getPB PBGetter) *cobra.Command {
 	var dryRun bool
+	var asJSON bool
 	var terminal string
 	var cwd string
 	var ignoreProject bool
@@ -1121,7 +1103,7 @@ func startCommand(getPB PBGetter) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			printPlan(cmd, plan)
+			printPlan(cmd, agentSlug, provider.Slug, modelOverride, plan, asJSON)
 			status := "started"
 			launchErr := adapter.Execute(plan, cleanup, opts)
 			if launchErr != nil {
@@ -1136,6 +1118,7 @@ func startCommand(getPB PBGetter) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the launch plan without starting the agent")
+	cmd.Flags().BoolVar(&asJSON, "json", false, "print the launch plan as raw JSON (for scripts)")
 	cmd.Flags().StringVar(&terminal, "terminal", "current", "current|ghostty|terminal")
 	cmd.Flags().StringVar(&cwd, "cwd", "", "working directory")
 	cmd.Flags().BoolVar(&ignoreProject, "ignore-project", false, "ignore .aiswrc project config")
@@ -1478,10 +1461,14 @@ func formatStringMap(values map[string]string) string {
 	return strings.Join(parts, ",")
 }
 
-func printPlan(cmd *cobra.Command, plan adapter.LaunchPlan) {
-	if bytes, err := json.MarshalIndent(plan, "", "  "); err == nil {
-		fmt.Fprintln(cmd.OutOrStdout(), string(bytes))
+func printPlan(cmd *cobra.Command, agent, provider, model string, plan adapter.LaunchPlan, asJSON bool) {
+	if asJSON {
+		if bytes, err := json.MarshalIndent(plan, "", "  "); err == nil {
+			fmt.Fprintln(cmd.OutOrStdout(), string(bytes))
+		}
+		return
 	}
+	fmt.Fprintln(cmd.OutOrStdout(), tui.RenderLaunchPlan(agent, provider, model, plan))
 }
 
 func maybeInitConfig(pb *pocketbase.PocketBase, initConfigPath string) error {

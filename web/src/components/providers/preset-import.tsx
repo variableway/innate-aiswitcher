@@ -13,8 +13,10 @@ import {
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { useDeletePreset, useImportPreset, useImportPresetFile, usePresets } from '@/lib/queries'
 import { useI18n } from '@/lib/i18n'
+import { cn } from '@/lib/utils'
 import type { Preset } from '@/lib/types'
 import { PROTOCOL_AGENTS } from '@/lib/types'
 
@@ -30,6 +32,7 @@ export function PresetImportDialog({ open, onOpenChange }: Props) {
   const importMutation = useImportPreset()
   const importFileMutation = useImportPresetFile()
   const deleteMutation = useDeletePreset()
+  const [deleteTarget, setDeleteTarget] = useState<Preset | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { t } = useI18n()
 
@@ -80,9 +83,10 @@ export function PresetImportDialog({ open, onOpenChange }: Props) {
                 return (
                   <div
                     key={preset.slug}
-                    className={`flex items-start gap-2 rounded-lg border p-3 transition-colors ${
+                    className={cn(
+                      'flex items-start gap-2 rounded-lg border p-3 transition-colors',
                       active ? 'border-primary bg-accent/50' : 'hover:bg-accent/40'
-                    }`}
+                    )}
                   >
                     <button
                       type="button"
@@ -117,7 +121,7 @@ export function PresetImportDialog({ open, onOpenChange }: Props) {
                         aria-label={t('preset.delete')}
                         className="text-muted-foreground hover:text-destructive"
                         disabled={deleteMutation.isPending}
-                        onClick={() => deleteMutation.mutate(preset.slug)}
+                        onClick={() => setDeleteTarget(preset)}
                       >
                         <Trash2 />
                       </Button>
@@ -173,11 +177,15 @@ export function PresetImportDialog({ open, onOpenChange }: Props) {
             )}
             {t('preset.importFile')}
           </Button>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            {!selected || !apiKey ? (
+              <FieldDescription>{t('preset.importHint')}</FieldDescription>
+            ) : null}
             <Button variant="outline" onClick={() => close(false)}>
               {t('preset.cancel')}
             </Button>
             <Button
+              variant="default"
               disabled={!selected || !apiKey || importMutation.isPending}
               onClick={importPreset}
             >
@@ -187,6 +195,20 @@ export function PresetImportDialog({ open, onOpenChange }: Props) {
           </div>
         </DialogFooter>
       </DialogContent>
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title={t('preset.delete')}
+        description={
+          deleteTarget ? t('preset.deleteConfirm.desc', { name: deleteTarget.name }) : undefined
+        }
+        confirmLabel={t('common.delete')}
+        pending={deleteMutation.isPending}
+        onConfirm={() =>
+          deleteTarget &&
+          deleteMutation.mutate(deleteTarget.slug, { onSuccess: () => setDeleteTarget(null) })
+        }
+      />
     </Dialog>
   )
 }
