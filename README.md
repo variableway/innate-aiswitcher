@@ -197,7 +197,7 @@ task verify
 task smoke
 ```
 
-`task smoke` 会启动本地 mock provider，并执行 `config template` → `config import` → `provider presets` → `provider add` → `test provider` → `test models` → `profile add` → `start --dry-run` → `config export --include-secrets` 的端到端流程。
+`task smoke` 会先构建 `bin/aisw` 并启动本地 mock provider（127.0.0.1:18990），在临时 pb_data 上执行 `config template` → `config import` → `provider list` → `provider from-preset glm` → `provider model add` → `start claude --dry-run` → `provider add local`（指向 mock）→ `test provider` → `test models` → `profile add` → `start codex --dry-run` → `config export --include-secrets` 的端到端流程，每步带输出断言，任一失败即非零退出。
 
 仓库里还有用于参考的外部项目/示例目录，其中部分 Go 示例缺自己的依赖，因此 `go test ./...`、`go build ./...`、`go mod tidy` 会被那些参考目录影响。当前项目包请使用 `Taskfile.yml` 中的 scoped 任务。
 

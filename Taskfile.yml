@@ -143,6 +143,15 @@ tasks:
       - task: build
       - go mod verify
 
+  smoke:
+    desc: Full CLI integration smoke test (temp pb_data + mock provider on 127.0.0.1:18990)
+    deps: [build]
+    cmds:
+      - cmd: pwsh -NoProfile -File scripts/smoke.ps1
+        platforms: [windows]
+      - cmd: bash scripts/smoke.sh
+        platforms: [linux, darwin]
+
   # ── Data ─────────────────────────────────────────────────
 
   sync-db:
