@@ -6,8 +6,8 @@ import { useI18n, type TranslationKey } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 const NAV: { to: string; labelKey: TranslationKey; icon: typeof Plug }[] = [
-  { to: '/agents', labelKey: 'nav.agents', icon: Bot },
   { to: '/providers', labelKey: 'nav.providers', icon: Plug },
+  { to: '/agents', labelKey: 'nav.agents', icon: Bot },
   { to: '/profiles', labelKey: 'nav.profiles', icon: Zap },
   { to: '/terminal', labelKey: 'nav.terminal', icon: SquareTerminal },
   { to: '/configs', labelKey: 'nav.configs', icon: FileCode2 },
