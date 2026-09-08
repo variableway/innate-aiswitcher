@@ -129,11 +129,10 @@ export function ModelList({ provider }: { provider: Provider }) {
         })}
       </div>
       <p className="text-muted-foreground text-xs">{t('meta.editHint')}</p>
-      <div>
+      <div className="flex flex-wrap gap-2">
         <Button
-          variant="ghost"
+          variant="outline"
           size="sm"
-          className="text-muted-foreground"
           disabled={enriching || models.length === 0}
           onClick={() => void enrich()}
         >
