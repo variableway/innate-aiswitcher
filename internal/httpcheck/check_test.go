@@ -191,20 +191,25 @@ func TestCheckProviderRequiresProviderDefaultModel(t *testing.T) {
 
 func TestFormat(t *testing.T) {
 	r := Result{OK: true, StatusCode: 200, Endpoint: "/test", Message: "ok"}
-	if !strings.Contains(Format(r), "ok status=200") {
-		t.Fatalf("unexpected format: %s", Format(r))
+	formatted := Format(r)
+	if !strings.Contains(formatted, "ok") || !strings.Contains(formatted, "200") {
+		t.Fatalf("unexpected format: %s", formatted)
+	}
+	if !strings.Contains(formatted, "/test") || !strings.Contains(formatted, "endpoint") {
+		t.Fatalf("expected aligned status/endpoint lines: %s", formatted)
 	}
 
 	r = Result{OK: false, StatusCode: 500, Endpoint: "/fail", Message: "error"}
-	if !strings.Contains(Format(r), "failed status=500") {
-		t.Fatalf("unexpected format: %s", Format(r))
+	formatted = Format(r)
+	if !strings.Contains(formatted, "failed") || !strings.Contains(formatted, "500") {
+		t.Fatalf("unexpected format: %s", formatted)
 	}
 }
 
 func TestFormatModels(t *testing.T) {
 	r := ModelsResult{OK: true, StatusCode: 200, Endpoint: "/models", Models: []string{"a", "b"}, Message: "ok"}
 	formatted := FormatModels(r)
-	if !strings.Contains(formatted, "ok status=200") {
+	if !strings.Contains(formatted, "ok") || !strings.Contains(formatted, "200") {
 		t.Fatalf("unexpected format: %s", formatted)
 	}
 	if !strings.Contains(formatted, "a") || !strings.Contains(formatted, "b") {
@@ -213,7 +218,7 @@ func TestFormatModels(t *testing.T) {
 
 	r = ModelsResult{OK: false, StatusCode: 404, Endpoint: "/models", Models: nil, Message: "not found"}
 	formatted = FormatModels(r)
-	if !strings.Contains(formatted, "failed status=404") {
+	if !strings.Contains(formatted, "failed") || !strings.Contains(formatted, "404") {
 		t.Fatalf("unexpected format: %s", formatted)
 	}
 }

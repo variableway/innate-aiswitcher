@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/variableway/innate-aiswitcher/internal/store"
 )
 
@@ -183,23 +184,59 @@ func endpointURL(provider store.Provider, key string, fallbackSuffix string) str
 	return base + "/" + endpoint
 }
 
-func Format(result Result) string {
-	status := "failed"
-	if result.OK {
-		status = "ok"
+var (
+	checkOKStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#7CFC00")).Bold(true)
+	checkFailedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6B6B")).Bold(true)
+	checkLabelStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#87CEEB"))
+	checkValueStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#E0E0E0"))
+)
+
+// checkLine renders one aligned detail line under the ✓/✗ status line.
+func checkLine(label, value string) string {
+	return "  " + checkLabelStyle.Render(fmt.Sprintf("%-9s", label+":")) + " " + checkValueStyle.Render(value)
+}
+
+// checkStatus renders the colored ✓ ok / ✗ failed status line.
+func checkStatus(ok bool) string {
+	if ok {
+		return checkOKStyle.Render("✓ ok")
 	}
-	return fmt.Sprintf("%s status=%d endpoint=%s\n%s", status, result.StatusCode, result.Endpoint, result.Message)
+	return checkFailedStyle.Render("✗ failed")
+}
+
+func Format(result Result) string {
+	var b strings.Builder
+	b.WriteString(checkStatus(result.OK))
+	b.WriteString("\n")
+	b.WriteString(checkLine("status", fmt.Sprintf("%d", result.StatusCode)))
+	b.WriteString("\n")
+	b.WriteString(checkLine("endpoint", result.Endpoint))
+	if result.Message != "" {
+		b.WriteString("\n")
+		b.WriteString(checkLine("message", result.Message))
+	}
+	return b.String()
 }
 
 func FormatModels(result ModelsResult) string {
-	status := "failed"
-	if result.OK {
-		status = "ok"
+	var b strings.Builder
+	b.WriteString(checkStatus(result.OK))
+	b.WriteString("\n")
+	b.WriteString(checkLine("status", fmt.Sprintf("%d", result.StatusCode)))
+	b.WriteString("\n")
+	b.WriteString(checkLine("endpoint", result.Endpoint))
+	if len(result.Models) > 0 {
+		b.WriteString("\n")
+		b.WriteString(checkLine("models", fmt.Sprintf("%d", len(result.Models))))
+		for _, model := range result.Models {
+			b.WriteString("\n")
+			b.WriteString("  " + checkValueStyle.Render("• "+model))
+		}
+	} else if result.Message != "" {
+		b.WriteString("\n")
+		b.WriteString(checkLine("message", result.Message))
 	}
-	if len(result.Models) == 0 {
-		return fmt.Sprintf("%s status=%d endpoint=%s\n%s", status, result.StatusCode, result.Endpoint, result.Message)
-	}
-	return fmt.Sprintf("%s status=%d endpoint=%s\n%s", status, result.StatusCode, result.Endpoint, strings.Join(result.Models, "\n"))
+	return b.String()
 }
 
 func extractModelIDs(body []byte) []string {
