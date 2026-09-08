@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/huh"
@@ -17,14 +18,118 @@ import (
 	"github.com/variableway/innate-aiswitcher/internal/templates"
 )
 
+// Accessible forces huh forms into accessible (line-based) mode. Set by the
+// --accessible CLI flag; the HuhAccessible / HUH_ACCESSIBLE env vars also work.
+var Accessible bool
+
+var slugPattern = regexp.MustCompile(`^[a-z0-9-]+$`)
+
+func accessibleMode() bool {
+	if Accessible {
+		return true
+	}
+	for _, name := range []string{"HuhAccessible", "HUH_ACCESSIBLE"} {
+		if value := os.Getenv(name); value == "1" || strings.EqualFold(value, "true") {
+			return true
+		}
+	}
+	return false
+}
+
+// newForm builds a huh form with the aisw theme and accessibility settings.
+func newForm(groups ...*huh.Group) *huh.Form {
+	return huh.NewForm(groups...).WithTheme(aiswTheme()).WithAccessible(accessibleMode())
+}
+
+// aiswTheme is ThemeCharm re-tinted to the aisw semantic palette in styles.go.
+func aiswTheme() *huh.Theme {
+	t := huh.ThemeCharm()
+
+	cream := lipgloss.Color("#FFFDF5")
+
+	t.Focused.Title = t.Focused.Title.Foreground(ColorPrimary).Bold(true)
+	t.Focused.NoteTitle = t.Focused.NoteTitle.Foreground(ColorPrimary).Bold(true)
+	t.Focused.Description = t.Focused.Description.Foreground(ColorMuted)
+	t.Focused.ErrorIndicator = t.Focused.ErrorIndicator.Foreground(ColorDanger)
+	t.Focused.ErrorMessage = t.Focused.ErrorMessage.Foreground(ColorDanger)
+	t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(ColorWarning)
+	t.Focused.NextIndicator = t.Focused.NextIndicator.Foreground(ColorWarning)
+	t.Focused.PrevIndicator = t.Focused.PrevIndicator.Foreground(ColorWarning)
+	t.Focused.MultiSelectSelector = t.Focused.MultiSelectSelector.Foreground(ColorWarning)
+	t.Focused.SelectedOption = t.Focused.SelectedOption.Foreground(ColorSuccess)
+	t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(cream).Background(ColorPrimary)
+	t.Focused.Next = t.Focused.FocusedButton
+	t.Focused.TextInput.Cursor = t.Focused.TextInput.Cursor.Foreground(ColorSuccess)
+	t.Focused.TextInput.Prompt = t.Focused.TextInput.Prompt.Foreground(ColorWarning)
+	t.Focused.TextInput.Placeholder = t.Focused.TextInput.Placeholder.Foreground(ColorMuted)
+
+	t.Blurred = t.Focused
+	t.Blurred.Base = t.Focused.Base.BorderStyle(lipgloss.HiddenBorder())
+	t.Blurred.Card = t.Blurred.Base
+	t.Blurred.MultiSelectSelector = lipgloss.NewStyle().SetString("  ")
+	t.Blurred.NextIndicator = lipgloss.NewStyle()
+	t.Blurred.PrevIndicator = lipgloss.NewStyle()
+	t.Group.Title = t.Focused.Title
+	t.Group.Description = t.Focused.Description
+	return t
+}
+
+// isTerminal reports whether f is an interactive terminal (no x/term dep).
+func isTerminal(f *os.File) bool {
+	info, err := f.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+
+func brandCard() string {
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorPrimary).
+		Padding(0, 2).
+		MarginBottom(1).
+		Render(SlugStyle.Render("⚡ aisw") + ValueStyle.Render(" · AI Provider Switcher"))
+}
+
+// contextSummary is the one-line state digest under the main menu. Every
+// store read is fault-tolerant: failed reads are simply omitted.
+func contextSummary(s *store.Store) string {
+	parts := []string{}
+	if providers, err := s.ListProviders(); err == nil {
+		parts = append(parts, fmt.Sprintf("%d providers", len(providers)))
+	}
+	if agents, err := s.ListAgents(); err == nil {
+		parts = append(parts, fmt.Sprintf("%d agents", len(agents)))
+	}
+	if profiles, err := s.ListProfiles(); err == nil {
+		for _, profile := range profiles {
+			if profile.IsDefault {
+				parts = append(parts, fmt.Sprintf("default: %s+%s", profile.AgentSlug, profile.ProviderSlug))
+				break
+			}
+		}
+	}
+	return strings.Join(parts, " · ")
+}
+
 func Run(s *store.Store) error {
+	// Non-interactive stdout (pipe, CI, redirect): never block on a form.
+	if !isTerminal(os.Stdout) {
+		fmt.Println(HintStyle.Render("aisw TUI needs an interactive terminal — showing the saved providers instead."))
+		providers, err := s.ListProviders()
+		if err != nil {
+			return err
+		}
+		PrintProviders(providers)
+		return nil
+	}
+
+	fmt.Println(brandCard())
 	for {
 		providers, err := s.ListProviders()
 		if err != nil {
 			return err
 		}
 		if len(providers) == 0 {
-			fmt.Println("No providers configured. Let's add one from a bundled template.")
+			fmt.Println(HintStyle.Render("No providers configured. Let's add one from a bundled template."))
 			if err := configureProvider(s); err != nil {
 				if !errors.Is(err, huh.ErrUserAborted) {
 					fmt.Fprintf(os.Stderr, "configure: %v\n", err)
@@ -35,15 +140,18 @@ func Run(s *store.Store) error {
 		}
 
 		action := "start"
-		if err := huh.NewForm(huh.NewGroup(
-			huh.NewSelect[string]().Title("Action").Options(
-				huh.NewOption("Start an agent session", "start"),
-				huh.NewOption("List providers", "list"),
-				huh.NewOption("Configure provider", "configure"),
-				huh.NewOption("Import models from market", "market"),
-				huh.NewOption("Test provider", "test"),
-				huh.NewOption("Quit", "quit"),
-			).Value(&action),
+		if err := newForm(huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Action").
+				Description(contextSummary(s)).
+				Options(
+					huh.NewOption("Start an agent session", "start"),
+					huh.NewOption("List providers", "list"),
+					huh.NewOption("Configure provider", "configure"),
+					huh.NewOption("Import models from market", "market"),
+					huh.NewOption("Test provider", "test"),
+					huh.NewOption("Quit", "quit"),
+				).Value(&action),
 		)).Run(); err != nil {
 			if errors.Is(err, huh.ErrUserAborted) {
 				return nil
@@ -55,7 +163,7 @@ func Run(s *store.Store) error {
 		case "quit":
 			return nil
 		case "list":
-			printProviders(providers)
+			PrintProviders(providers)
 		case "configure":
 			if err := configureProvider(s); err != nil && !errors.Is(err, huh.ErrUserAborted) {
 				fmt.Fprintf(os.Stderr, "configure: %v\n", err)
@@ -69,7 +177,12 @@ func Run(s *store.Store) error {
 				fmt.Fprintf(os.Stderr, "test: %v\n", err)
 			}
 		default:
-			return startSession(s, providers)
+			if err := startSession(s, providers); err != nil {
+				if errors.Is(err, huh.ErrUserAborted) {
+					continue
+				}
+				return err
+			}
 		}
 	}
 }
@@ -178,33 +291,105 @@ func startSession(s *store.Store, providers []store.Provider) error {
 		return err
 	}
 
+	agentBySlug := map[string]store.Agent{}
 	agentOptions := make([]huh.Option[string], 0, len(agents))
 	for _, agent := range agents {
 		if agent.Active {
-			agentOptions = append(agentOptions, huh.NewOption(agent.Name+" ("+agent.Slug+")", agent.Slug))
+			agentBySlug[agent.Slug] = agent
+			agentOptions = append(agentOptions, huh.NewOption(agent.Slug+" · "+agent.Name, agent.Slug))
 		}
 	}
-	var agentSlug string
-	if err := huh.NewForm(huh.NewGroup(
-		huh.NewSelect[string]().Title("Agent").Options(agentOptions...).Value(&agentSlug),
-	)).Run(); err != nil {
-		return err
+	if len(agentOptions) == 0 {
+		return fmt.Errorf("no active agents configured")
 	}
 
-	// Only offer providers that can serve the chosen agent.
-	providerOptions := make([]huh.Option[string], 0, len(providers))
+	providerBySlug := map[string]store.Provider{}
 	for _, provider := range providers {
-		if provider.Active && providerconfig.SupportsAgent(provider, agentAdapter(s, agentSlug)) {
-			providerOptions = append(providerOptions, huh.NewOption(providerSelectLabel(provider), provider.Slug))
+		if provider.Active {
+			providerBySlug[provider.Slug] = provider
 		}
 	}
-	if len(providerOptions) == 0 {
-		return fmt.Errorf("no active providers support agent %s; add one from a preset first", agentSlug)
+	if len(providerBySlug) == 0 {
+		return fmt.Errorf("no active providers configured; add one from a preset first")
 	}
-	var selector string
-	if err := huh.NewForm(huh.NewGroup(
-		huh.NewSelect[string]().Title("Provider").Options(providerOptions...).Value(&selector),
-	)).Run(); err != nil {
+
+	var agentSlug, selector, modelOverride string
+	startNow := true
+
+	// Provider options re-filter whenever the chosen agent changes; model
+	// options follow the chosen provider. One form, four navigable groups.
+	form := newForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Agent").
+				Options(agentOptions...).
+				DescriptionFunc(func() string {
+					agent, ok := agentBySlug[agentSlug]
+					if !ok {
+						return ""
+					}
+					return "adapter: " + agent.Adapter
+				}, &agentSlug).
+				Value(&agentSlug),
+		),
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Provider").
+				OptionsFunc(func() []huh.Option[string] {
+					options := make([]huh.Option[string], 0, len(providerBySlug))
+					for _, provider := range providers {
+						if provider.Active && providerconfig.SupportsAgent(provider, agentAdapter(s, agentSlug)) {
+							options = append(options, huh.NewOption(providerSelectLabel(provider), provider.Slug))
+						}
+					}
+					return options
+				}, &agentSlug).
+				DescriptionFunc(func() string {
+					return providerDescription(providerBySlug[selector])
+				}, &selector).
+				Validate(func(value string) error {
+					provider, ok := providerBySlug[value]
+					if !ok {
+						return fmt.Errorf("no active provider supports agent %s; abort and configure one first", agentSlug)
+					}
+					if !providerconfig.SupportsAgent(provider, agentAdapter(s, agentSlug)) {
+						return fmt.Errorf("provider %s does not support agent %s", value, agentSlug)
+					}
+					return nil
+				}).
+				Value(&selector),
+		),
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Model").
+				OptionsFunc(func() []huh.Option[string] {
+					provider, ok := providerBySlug[selector]
+					if !ok {
+						return []huh.Option[string]{huh.NewOption("default", "")}
+					}
+					options := []huh.Option[string]{
+						huh.NewOption(fmt.Sprintf("default (%s)", provider.DefaultModel), ""),
+					}
+					for _, model := range provider.Models {
+						if model == provider.DefaultModel {
+							continue
+						}
+						options = append(options, huh.NewOption(model, model))
+					}
+					return options
+				}, &selector).
+				Value(&modelOverride),
+		),
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Start the session now?").
+				Description("Dry run prints the launch plan without starting the agent.").
+				Affirmative("Start now").
+				Negative("Dry run").
+				Value(&startNow),
+		),
+	)
+	if err := form.Run(); err != nil {
 		return err
 	}
 
@@ -213,46 +398,14 @@ func startSession(s *store.Store, providers []store.Provider) error {
 		return err
 	}
 
-	// Model choice: default plus every configured model (all share the key).
-	modelOverride := ""
-	if len(provider.Models) > 1 {
-		modelOptions := []huh.Option[string]{
-			huh.NewOption(fmt.Sprintf("default (%s)", provider.DefaultModel), ""),
-		}
-		for _, model := range provider.Models {
-			if model == provider.DefaultModel {
-				continue
-			}
-			modelOptions = append(modelOptions, huh.NewOption(model, model))
-		}
-		if err := huh.NewForm(huh.NewGroup(
-			huh.NewSelect[string]().Title("Model").Options(modelOptions...).Value(&modelOverride),
-		)).Run(); err != nil {
-			return err
-		}
-	}
-
-	dryRun := true
-	if err := huh.NewForm(huh.NewGroup(
-		huh.NewConfirm().Title("Dry run only?").Affirmative("yes").Negative("start now").Value(&dryRun),
-	)).Run(); err != nil {
-		return err
-	}
-
 	cwd, _ := os.Getwd()
-	opts := adapter.LaunchOptions{CWD: cwd, Terminal: "current", DryRun: dryRun, Model: modelOverride}
+	opts := adapter.LaunchOptions{CWD: cwd, Terminal: "current", DryRun: !startNow, Model: modelOverride}
 	plan, cleanup, err := adapter.BuildPlan(*agent, *provider, profile, opts)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
-	fmt.Printf("Command: %s\n", plan.Command)
-	if len(plan.Env) > 0 {
-		fmt.Printf("Env: %v\n", plan.Env)
-	}
-	if len(plan.Files) > 0 {
-		fmt.Printf("Temp files: %v\n", plan.Files)
-	}
+	fmt.Println(RenderLaunchPlan(agent.Slug, provider.Slug, modelOverride, plan))
 	return adapter.Execute(plan, func() {}, opts)
 }
 
@@ -280,7 +433,7 @@ func configureProvider(s *store.Store) error {
 	}
 
 	var presetSlug string
-	if err := huh.NewForm(huh.NewGroup(
+	if err := newForm(huh.NewGroup(
 		huh.NewSelect[string]().Title("Provider template").Options(presetOptions...).Value(&presetSlug),
 	)).Run(); err != nil {
 		return err
@@ -313,23 +466,69 @@ func configureProvider(s *store.Store) error {
 		models = strings.Join(existing.Models, ", ")
 		name = existing.Name
 		if existing.APIKey != "" {
-			keyDescription = "Key already saved. Leave empty to keep it, or enter a new one."
+			keyDescription = fmt.Sprintf("Saved key: %s — leave empty to keep it, or enter a new one.", MaskAPIKey(existing.APIKey))
 		}
 	}
 
-	if err := huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title("Provider slug").Value(&slug),
-		huh.NewInput().Title("Display name").Value(&name),
-		huh.NewInput().Title("API key").Description(keyDescription).EchoMode(huh.EchoModePassword).Value(&apiKey),
-		huh.NewInput().Title("Default model").Value(&model),
-		huh.NewInput().Title("Models").Description("Comma-separated; all models share the API key.").Value(&models),
+	if err := newForm(huh.NewGroup(
+		huh.NewInput().Title("Provider slug").Placeholder("my-provider").
+			Validate(func(value string) error {
+				if !slugPattern.MatchString(strings.TrimSpace(value)) {
+					return fmt.Errorf("slug must match ^[a-z0-9-]+$ (lowercase letters, digits, dashes)")
+				}
+				return nil
+			}).Value(&slug),
+		huh.NewInput().Title("Display name").Placeholder(provider.Name).
+			Validate(func(value string) error {
+				if strings.TrimSpace(value) == "" {
+					return fmt.Errorf("name is required")
+				}
+				return nil
+			}).Value(&name),
+		huh.NewInput().Title("API key").Description(keyDescription).Placeholder("sk-...").
+			EchoMode(huh.EchoModePassword).Value(&apiKey),
+		huh.NewInput().Title("Models").Placeholder("model-a, model-b").
+			Description("Comma-separated; all models share the API key.").
+			Validate(func(value string) error {
+				if len(splitModels(value)) == 0 {
+					return fmt.Errorf("at least one model is required")
+				}
+				return nil
+			}).Value(&models),
+		huh.NewInput().Title("Default model").Placeholder(provider.DefaultModel).
+			Description("Leave empty to use the first model in the list.").Value(&model),
 	)).Run(); err != nil {
 		return err
 	}
 
+	slug = strings.TrimSpace(slug)
+
+	// Renaming the slug would silently orphan the existing provider — confirm.
+	if existing != nil && slug != existing.Slug {
+		var createNew bool
+		if err := newForm(huh.NewGroup(
+			huh.NewConfirm().
+				Title(fmt.Sprintf("Slug changed: %s → %s", existing.Slug, slug)).
+				Description("Saving now creates a NEW provider; the existing one stays untouched.").
+				Affirmative("Create new").
+				Negative("Cancel").
+				Value(&createNew),
+		)).Run(); err != nil {
+			return err
+		}
+		if !createNew {
+			fmt.Println(HintStyle.Render("Cancelled — existing provider unchanged."))
+			return nil
+		}
+	}
+
 	provider.Slug = slug
-	provider.Name = name
+	provider.Name = strings.TrimSpace(name)
 	provider.APIKey = strings.TrimSpace(apiKey)
+	if provider.APIKey == "" && existing != nil && slug == existing.Slug {
+		// Empty key on an unchanged slug keeps the stored key.
+		provider.APIKey = existing.APIKey
+	}
 	provider.DefaultModel = strings.TrimSpace(model)
 	provider.Models = splitModels(models)
 	if provider.DefaultModel == "" && len(provider.Models) > 0 {
@@ -342,13 +541,12 @@ func configureProvider(s *store.Store) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Saved provider %s (models: %s, endpoints: %s)\n",
-		saved.Slug, strings.Join(saved.Models, ", "), strings.Join(variantProtocols(*saved), ", "))
+	fmt.Println(RenderSavedProvider(*saved))
 
 	if saved.APIKey != "" {
 		var testNow bool
-		if err := huh.NewForm(huh.NewGroup(
-			huh.NewConfirm().Title("Test this provider now?").Affirmative("test").Negative("skip").Value(&testNow),
+		if err := newForm(huh.NewGroup(
+			huh.NewConfirm().Title("Test this provider now?").Affirmative("Test").Negative("Skip").Value(&testNow),
 		)).Run(); err != nil {
 			return err
 		}
@@ -374,19 +572,6 @@ func splitModels(value string) []string {
 	return models
 }
 
-func variantProtocols(provider store.Provider) []string {
-	protocols := make([]string, 0, len(provider.Variants))
-	for _, protocol := range []string{"anthropic", "openai_responses", "openai_chat"} {
-		if _, ok := provider.Variants[protocol]; ok {
-			protocols = append(protocols, protocol)
-		}
-	}
-	if len(protocols) == 0 && provider.APIProtocol != "" {
-		protocols = append(protocols, provider.APIProtocol)
-	}
-	return protocols
-}
-
 func testProvider(providers []store.Provider) error {
 	providerOptions := make([]huh.Option[string], 0, len(providers))
 	providerBySlug := map[string]store.Provider{}
@@ -402,8 +587,14 @@ func testProvider(providers []store.Provider) error {
 
 	var providerSlug string
 	var model string
-	if err := huh.NewForm(huh.NewGroup(
-		huh.NewSelect[string]().Title("Provider").Options(providerOptions...).Value(&providerSlug),
+	if err := newForm(huh.NewGroup(
+		huh.NewSelect[string]().
+			Title("Provider").
+			Options(providerOptions...).
+			DescriptionFunc(func() string {
+				return providerDescription(providerBySlug[providerSlug])
+			}, &providerSlug).
+			Value(&providerSlug),
 		huh.NewInput().Title("Model override").Description("Leave empty to use provider default model.").Value(&model),
 	)).Run(); err != nil {
 		return err
@@ -424,105 +615,39 @@ func runProviderTest(provider store.Provider, model string) error {
 	return nil
 }
 
-func printProviders(providers []store.Provider) {
-	for _, provider := range providers {
-		fmt.Println(providerSelectLabel(provider))
-	}
-}
-
+// providerSelectLabel is the compact select-option label: slug · name only.
+// Details (protocols/models/key state) live in the field description.
 func providerSelectLabel(provider store.Provider) string {
-	keyState := "key=missing"
-	if provider.APIKey != "" {
-		keyState = "key=set"
-	}
-	protocols := strings.Join(variantProtocols(provider), ",")
-	model := provider.DefaultModel
-	if len(provider.Models) > 0 {
-		model = strings.Join(provider.Models, ",")
-	}
-	if model == "" {
-		model = "model=missing"
-	}
-	return fmt.Sprintf("%s | %s | %s | %s | key=%s", provider.Slug, provider.Name, protocols, model, keyState)
+	return provider.Slug + " · " + provider.Name
 }
 
-// PrintPresets renders vendor provider presets with styled TUI output using lipgloss.
-func PrintPresets(presets []templates.ProviderPreset) {
-	// Styles
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#7CFC00")).
-		MarginBottom(1)
-
-	presetBoxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#3C3C3C")).
-		Padding(0, 1).
-		MarginBottom(1)
-
-	labelStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#87CEEB")).
-		Width(14)
-
-	valueStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#E0E0E0"))
-
-	slugStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#FFD700"))
-
-	variantStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#98FB98"))
-
-	hintStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#808080")).
-		Italic(true)
-
-	// Title
-	fmt.Println(titleStyle.Render("📦 Built-in Provider Presets (one API key per vendor)"))
-	fmt.Println()
-
-	for _, preset := range presets {
-		var presetContent strings.Builder
-
-		// Preset header: slug + name
-		presetContent.WriteString(
-			lipgloss.JoinHorizontal(lipgloss.Top,
-				slugStyle.Render(preset.Slug),
-				lipgloss.NewStyle().Width(2).Render(" "),
-				valueStyle.Render(preset.Name),
-			),
-		)
-		presetContent.WriteString("\n")
-
-		// Models
-		presetContent.WriteString(
-			lipgloss.JoinHorizontal(lipgloss.Top,
-				labelStyle.Render("models"),
-				valueStyle.Render(strings.Join(preset.Models, ", ")),
-			),
-		)
-		presetContent.WriteString("\n")
-
-		// Per-protocol variants
-		for _, protocol := range templates.PresetProtocols(preset) {
-			for _, variant := range preset.Variants {
-				if variant.Protocol != protocol {
-					continue
-				}
-				presetContent.WriteString(
-					lipgloss.JoinHorizontal(lipgloss.Top,
-						labelStyle.Render(protocol),
-						variantStyle.Render(variant.BaseURL),
-					),
-				)
-				presetContent.WriteString("\n")
-			}
-		}
-
-		fmt.Println(presetBoxStyle.Render(presetContent.String()))
+// providerDescription renders the second information layer for provider
+// selects. Key status matches the cards: ✓ key set / ✗ key missing.
+func providerDescription(provider store.Provider) string {
+	if provider.Slug == "" {
+		return ""
 	}
+	protocols := strings.Join(VariantProtocols(provider), ", ")
+	models := strings.Join(provider.Models, ", ")
+	if models == "" {
+		models = "(any)"
+	}
+	keyState := "✗ key missing"
+	if provider.APIKey != "" {
+		keyState = "✓ key set"
+	}
+	return fmt.Sprintf("protocols: %s · models: %s · %s", protocols, models, keyState)
+}
 
-	fmt.Println(hintStyle.Render(fmt.Sprintf("Total: %d preset(s) — add with: aisw provider from-preset <slug> --api-key <key>", len(presets))))
+// PrintPresets renders builtin vendor provider presets as styled cards.
+func PrintPresets(presets []templates.ProviderPreset) {
+	var b strings.Builder
+	b.WriteString(TitleStyle.Render("📦 Built-in Provider Presets (one API key per vendor)"))
+	b.WriteString("\n")
+	for _, preset := range presets {
+		b.WriteString(RenderPresetCard(preset, ""))
+		b.WriteString("\n")
+	}
+	b.WriteString(HintStyle.Render(fmt.Sprintf("Total: %d preset(s) — add with: aisw provider from-preset <slug> --api-key <key>", len(presets))))
+	fmt.Println(b.String())
 }
