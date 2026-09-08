@@ -104,10 +104,10 @@ export function ModelList({ provider }: { provider: Provider }) {
               <ModelMetaPopover provider={provider} model={m} meta={meta}>
                 <button
                   type="button"
-                  className="cursor-pointer"
+                  className="flex cursor-pointer items-center gap-0.5"
                   aria-label={t('meta.title') + ' ' + m}
                 >
-                  {m === provider.default_model && <Check data-icon="inline-start" />}
+                  {m === provider.default_model && <Check className="size-3" data-icon="inline-start" />}
                   {m}
                 </button>
               </ModelMetaPopover>
