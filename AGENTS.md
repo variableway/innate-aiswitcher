@@ -31,7 +31,7 @@ Focused agents today: `claude`, `codex`, `opencode`. Retired agents (gemini/kimi
 The repo root contains reference material with broken external deps, so unscoped `go test ./...`, `go build ./...`, or `go mod tidy` **will fail**. Always go through `Taskfile.yml`:
 
 ```bash
-task build       # fmt + go build -o bin/aisw ./cmd/aisw
+task build       # web:build + go build -o bin/aisw — full single binary
 task test        # scoped: go test . ./cmd/aisw ./cmd/mock-provider ./internal/... ./migrations
 task compile     # scoped go build across the same package set
 task verify      # fmt + vet + test + compile + build + go mod verify
@@ -40,7 +40,6 @@ task serve       # REST API + Web UI on 127.0.0.1:8090
 task web         # serve + open browser (web app + browser PTY terminals)
 task web:dev     # Vite dev server (/api proxied to 127.0.0.1:8090)
 task web:build   # build web/ and sync dist into internal/webui/dist (go:embed)
-task build:full  # web:build + go build — full single binary
 task run         # launch the interactive TUI
 task install     # build + cp bin/aisw to ~/.local/bin
 task fmt         # gofmt -w main.go cmd/aisw internal migrations

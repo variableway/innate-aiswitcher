@@ -11,11 +11,11 @@ AISwitcher 当前聚焦三个 coding agent：**Claude Code**、**Codex CLI**、*
 
 ```bash
 git clone <repo> && cd innate-aiswitcher
-task build:full   # 构建前端 + Go 单体二进制
+task build        # 构建前端 + Go 单体二进制
 task install      # 安装到 ~/.local/bin
 ```
 
-> `task build` 只构建 Go 二进制（嵌入上次的前端产物快照）；`task build:full` 会先重新构建 Web 前端。
+> `task build` 总是先重新构建 Web 前端，再编译内嵌它的 Go 二进制。
 
 ## 2. 安装 Agent（按需）
 

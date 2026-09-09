@@ -37,7 +37,7 @@ task serve      # 另一个终端：起 Go API
 ## 打包为单体二进制
 
 ```bash
-task build:full   # = task web:build（vite build + 同步产物到 internal/webui/dist）+ go build
+task build        # = task web:build（vite build + 同步产物到 internal/webui/dist）+ go build
 ```
 
 前端产物通过 `go:embed` 嵌入 `internal/webui`，`bin/aisw` 单文件即可运行完整 Web 应用（离线可用）。

@@ -13,15 +13,14 @@ The core invariant: **Provider and Agent Adapter are decoupled**. Providers live
 The repo root contains reference projects with broken external deps, so unscoped `go test ./...`, `go build ./...`, or `go mod tidy` will fail. Always go through `Taskfile.yml`:
 
 ```bash
-task build       # fmt + go build -o bin/aisw ./cmd/aisw
+task build       # web:build + go build -o bin/aisw (full single binary)
 task test        # scoped: go test . ./cmd/aisw ./cmd/mock-provider ./internal/... ./migrations
-task compile     # scoped: go build across the same set
+task compile     # scoped go build across the same set
 task verify      # fmt + test + compile + build + go mod verify
 task smoke       # full CLI integration: temp pb_data + local mock-provider + provider/profile/test/start/export
 task serve       # REST API + Web UI on 127.0.0.1:8090
 task web         # go run ./cmd/aisw web — web app + browser terminals (opens browser)
 task web:build   # build web/ frontend and sync into internal/webui/dist
-task build:full  # web:build + go build (full single binary)
 task run         # go run ./cmd/aisw — launches the TUI
 task install     # build + cp bin/aisw to ~/.local/bin
 task clean       # rm -rf bin

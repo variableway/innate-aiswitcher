@@ -4,7 +4,7 @@
 # 需要: Go 1.26+, Task (https://taskfile.dev)
 #
 # 快速开始:
-#   task build          # 构建二进制到 bin/ 目录
+#   task build          # 构建前端 + 单体二进制到 bin/ 目录
 #   task serve          # 启动 API 服务器 + Web UI
 #   task docs:dev       # 启动 docmd 文档站本地预览
 #   task docs:build     # 构建静态文档到 site/
@@ -30,37 +30,37 @@ tasks:
   # ── Build & Install ──────────────────────────────────────
 
   build:
-    desc: Build the aisw binary to bin/aisw (current OS; embeds the web/dist snapshot)
+    desc: Build the web frontend then the aisw binary (full single-binary app)
+    deps: [web:build]
     cmds:
       - go build -o "{{.BIN_DIR}}/{{.BINARY}}{{.BIN_EXT}}" {{.CLI_PKG}}
     generates:
       - "{{.BIN_DIR}}/{{.BINARY}}"
 
-  build:full:
-    desc: Build the web frontend then the aisw binary (full single-binary app)
-    cmds:
-      - task: web:build
-      - task: build
-
   web:install:
     desc: Install web frontend dependencies (web/)
+    dir: web
     cmds:
-      - cmd: npm install
-        dir: web
+      - npm install
 
   web:dev:
     desc: Vite dev server with /api proxied to 127.0.0.1:8090 (run task serve alongside)
+    dir: web
     cmds:
-      - cmd: npm run dev
-        dir: web
+      - npm run dev
 
   web:build:
     desc: Build the web frontend and sync it into internal/webui/dist for go:embed
     deps: [web:install]
     cmds:
-      - cmd: npm run build
-        dir: web
+      - task: web:build:vite
       - cmd: rm -rf internal/webui/dist && mkdir -p internal/webui/dist && cp -R web/dist/. internal/webui/dist/
+
+  web:build:vite:
+    desc: Run the Vite production build inside web/
+    dir: web
+    cmds:
+      - npm run build
 
   build:windows:
     desc: Cross-compile for Windows amd64

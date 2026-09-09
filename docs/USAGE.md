@@ -16,7 +16,7 @@ description: "AISwitcher 日常使用：厂商 Provider、模型管理、启动 
 ## 快速开始
 
 ```bash
-task build:full        # 构建前端 + Go 单体二进制（bin/aisw 内嵌 Web 应用）
+task build            # 构建前端 + Go 单体二进制（bin/aisw 内嵌 Web 应用）
 aisw web               # 启动并打开 Web 页面（Providers / Profiles / Terminal）
 ```
 

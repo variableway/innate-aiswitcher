@@ -20,14 +20,13 @@
 推荐用 Task 管理构建和验证：
 
 ```bash
-task build       # build bin/aisw
+task build       # web:build + go build — full single binary (bin/aisw 内嵌 Web 应用)
 task test        # run scoped unit tests
 task verify      # fmt + vet + test + build + go mod verify
 task smoke       # run a local CLI smoke test (mock provider)
 task serve       # start REST API + embedded Web UI
 task web         # aisw web — Web UI + browser terminal sessions (opens browser)
 task web:build   # build web/ frontend into internal/webui/dist (go:embed)
-task build:full  # web:build + go build — full single binary
 task run         # launch the interactive TUI
 task install     # build + copy bin/aisw to ~/.local/bin
 task docs:dev    # docmd dev server for the documentation site

@@ -19,13 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Bilingual Web UI (中/EN)**: language toggle in the sidebar, auto-detected from the browser and persisted in localStorage (`web/src/lib/i18n.tsx`); every page string translated.
 - **User presets persisted as files**: save any provider as a reusable preset (`aisw provider preset save SLUG`, Web card button) into `~/.innate-aiswitcher/presets/*.toml` (API keys excluded); import presets from TOML files (`aisw provider preset import PATH`, Web upload button); user presets appear alongside builtin ones with a source badge and can be deleted. REST: `GET /api/aisw/presets` now includes `source`, plus `POST /api/aisw/presets`, `POST /api/aisw/presets/import`, `DELETE /api/aisw/presets/{slug}`.
 
-- **Web app rewrite** (`web/`, Vite + React 19 + TanStack Query/Router + shadcn/ui with Tailwind v4): Providers page (vendor cards, per-model badges, preset import, connectivity tests), Profiles page (agent-aware provider filtering), and browser Terminal sessions (xterm.js over WebSocket to local PTYs, multi-tab, one-click `aisw start <agent> <provider>`). Built output is embedded into the Go binary (`task web:build` → `internal/webui/dist`, `task build:full`) — still a single `aisw` binary.
+- **Web app rewrite** (`web/`, Vite + React 19 + TanStack Query/Router + shadcn/ui with Tailwind v4): Providers page (vendor cards, per-model badges, preset import, connectivity tests), Profiles page (agent-aware provider filtering), and browser Terminal sessions (xterm.js over WebSocket to local PTYs, multi-tab, one-click `aisw start <agent> <provider>`). Built output is embedded into the Go binary (`task web:build` → `internal/webui/dist`, then `go build`) — still a single `aisw` binary.
 - Official shadcn skill vendored at `.zcode/skills/shadcn` to constrain frontend work.
 - `aisw web` command: same server as `serve` plus auto-opening the browser; warns when terminal sessions would be exposed beyond loopback.
 - WebSocket endpoint `GET /api/aisw/terminal` (`internal/terminal`) with PTY bridging, resize control frames and exit notifications; covered by Ginkgo BDD specs.
 
 ### Changed
 
+- **`task build` is now the full build**: it always builds the web frontend first and embeds the fresh output, so a binary with the placeholder page can no longer be produced by accident. The separate `task build:full` task is removed (`task build` replaces it).
 - **Vendor-centric providers ("LLM Provider Config")**: one provider row per vendor (e.g. `glm`, `minimax`) with a single `api_key`, a `models` list, and per-protocol `variants` (`anthropic` / `openai_responses` / `openai_chat`). New package `internal/providerconfig` resolves the agent adapter onto the matching variant at launch, so one API key powers claude code, codex and opencode at once.
   - `providers` collection gains `models` (JSON list) and `variants` (JSON map) fields via migration `1780993000`; legacy single-protocol rows keep working.
   - Provider presets are vendor-level now (`[[presets]]` + `[[presets.variants]]`); the catalog focuses on `glm` (glm-5.2 / glm-5.3 on Volcengine Ark) and `minimax`.
