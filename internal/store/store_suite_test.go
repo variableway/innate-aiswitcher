@@ -239,7 +239,7 @@ var _ = Describe("legacy vendor normalization", func() {
 			Slug: "minimax", Name: "MiniMax",
 			DefaultModel: "MiniMax-M3", Models: []string{"MiniMax-M3"},
 			Variants: map[string]ProviderVariant{
-				"anthropic":       {BaseURL: "https://api.minimaxi.com/anthropic"},
+				"anthropic":        {BaseURL: "https://api.minimaxi.com/anthropic"},
 				"openai_responses": {BaseURL: "https://api.minimaxi.com/v1"},
 				"openai_chat":      {BaseURL: "https://api.minimaxi.com/v1"},
 			},
@@ -296,7 +296,7 @@ var _ = Describe("legacy vendor normalization", func() {
 			Slug: "glm", Name: "GLM (Volcengine Ark)", DefaultModel: "glm-5.2",
 			Models: []string{"glm-5.2", "glm-5.3"},
 			Variants: map[string]ProviderVariant{
-				"anthropic":  {BaseURL: "https://ark.cn-beijing.volces.com/api/plan"},
+				"anthropic":   {BaseURL: "https://ark.cn-beijing.volces.com/api/plan"},
 				"openai_chat": {BaseURL: "https://ark.cn-beijing.volces.com/api/v3"},
 			},
 		}

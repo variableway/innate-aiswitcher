@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/variableway/innate-aiswitcher/internal/adapter"
 	"github.com/variableway/innate-aiswitcher/internal/httpcheck"
+	"github.com/variableway/innate-aiswitcher/internal/market"
 	"github.com/variableway/innate-aiswitcher/internal/providerconfig"
 	"github.com/variableway/innate-aiswitcher/internal/store"
 	"github.com/variableway/innate-aiswitcher/internal/templates"
@@ -39,6 +40,7 @@ func Run(s *store.Store) error {
 				huh.NewOption("Start an agent session", "start"),
 				huh.NewOption("List providers", "list"),
 				huh.NewOption("Configure provider", "configure"),
+				huh.NewOption("Import models from market", "market"),
 				huh.NewOption("Test provider", "test"),
 				huh.NewOption("Quit", "quit"),
 			).Value(&action),
@@ -58,6 +60,10 @@ func Run(s *store.Store) error {
 			if err := configureProvider(s); err != nil && !errors.Is(err, huh.ErrUserAborted) {
 				fmt.Fprintf(os.Stderr, "configure: %v\n", err)
 			}
+		case "market":
+			if err := importMarketModels(s, providers); err != nil && !errors.Is(err, huh.ErrUserAborted) {
+				fmt.Fprintf(os.Stderr, "market import: %v\n", err)
+			}
 		case "test":
 			if err := testProvider(providers); err != nil && !errors.Is(err, huh.ErrUserAborted) {
 				fmt.Fprintf(os.Stderr, "test: %v\n", err)
@@ -66,6 +72,104 @@ func Run(s *store.Store) error {
 			return startSession(s, providers)
 		}
 	}
+}
+
+// marketPickLimit caps how many catalog entries the multi-select renders;
+// the search prompt narrows the list below it.
+const marketPickLimit = 100
+
+// importMarketModels pulls models from the local market catalog (lobehub
+// snapshot fetched via the Web UI or fetched on demand) into a vendor
+// provider. Imported models join the provider's model list and share its
+// single API key, exactly like `aisw provider model add`.
+func importMarketModels(s *store.Store, providers []store.Provider) error {
+	catalog, err := market.LoadCatalog(s, market.Filter{})
+	if err != nil {
+		return err
+	}
+	if !catalog.HasData {
+		fmt.Println("No local market catalog data yet.")
+		var fetchNow bool
+		if err := huh.NewForm(huh.NewGroup(
+			huh.NewConfirm().Title("Fetch the catalog from lobehub now?").Affirmative("fetch").Negative("cancel").Value(&fetchNow),
+		)).Run(); err != nil {
+			return err
+		}
+		if !fetchNow {
+			return nil
+		}
+		result, err := market.FetchAndStore(context.Background(), s, market.LoadSettings(s), nil)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Fetched %d models across %d vendor categories.\n", result.Fetched, result.Categories)
+		catalog, err = market.LoadCatalog(s, market.Filter{})
+		if err != nil {
+			return err
+		}
+	}
+
+	providerOptions := make([]huh.Option[string], 0, len(providers))
+	providerBySlug := map[string]store.Provider{}
+	for _, provider := range providers {
+		if provider.Active {
+			providerOptions = append(providerOptions, huh.NewOption(providerSelectLabel(provider), provider.Slug))
+			providerBySlug[provider.Slug] = provider
+		}
+	}
+	if len(providerOptions) == 0 {
+		return fmt.Errorf("no active providers configured; add one from a preset first")
+	}
+	var providerSlug string
+	var query string
+	if err := huh.NewForm(huh.NewGroup(
+		huh.NewSelect[string]().Title("Provider (models will share its API key)").Options(providerOptions...).Value(&providerSlug),
+		huh.NewInput().Title("Search catalog").Description("Optional substring over model id/name; empty lists the first entries.").Value(&query),
+	)).Run(); err != nil {
+		return err
+	}
+
+	if filtered, err := market.LoadCatalog(s, market.Filter{Query: strings.TrimSpace(query)}); err == nil {
+		catalog = filtered
+	}
+	if len(catalog.Items) == 0 {
+		return fmt.Errorf("no catalog models match %q", query)
+	}
+
+	provider := providerBySlug[providerSlug]
+	modelOptions := make([]huh.Option[string], 0, marketPickLimit)
+	for i, item := range catalog.Items {
+		if i >= marketPickLimit {
+			break
+		}
+		label := fmt.Sprintf("%s (%s)", item.Identifier, item.Category)
+		if provider.HasModel(item.Identifier) {
+			label += " — already configured"
+		}
+		modelOptions = append(modelOptions, huh.NewOption(label, item.Identifier))
+	}
+
+	var picked []string
+	if err := huh.NewForm(huh.NewGroup(
+		huh.NewMultiSelect[string]().Title("Models").Description("Type to filter; space toggles, enter confirms.").
+			Filterable(true).Options(modelOptions...).Value(&picked),
+	)).Run(); err != nil {
+		return err
+	}
+	if len(picked) == 0 {
+		return nil
+	}
+	if len(catalog.Items) > marketPickLimit {
+		fmt.Printf("Listing capped at %d of %d matches — narrow the search to reach the rest.\n", marketPickLimit, len(catalog.Items))
+	}
+
+	saved, err := s.AddModels(providerSlug, picked)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Imported %d model(s) into %s — all models share its API key.\nmodels: %s\n",
+		len(picked), saved.Slug, strings.Join(saved.Models, ", "))
+	return nil
 }
 
 func startSession(s *store.Store, providers []store.Provider) error {

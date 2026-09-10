@@ -8,6 +8,9 @@ export const queryKeys = {
   profiles: ['profiles'] as const,
   agents: ['agents'] as const,
   presets: ['presets'] as const,
+  market: (category: string, q: string) => ['market', category, q] as const,
+  marketCategories: ['market-categories'] as const,
+  marketSettings: ['market-settings'] as const,
 }
 
 export function useProviders() {
@@ -182,5 +185,64 @@ export function useDeleteProfile() {
       invalidate(queryKeys.profiles)
     },
     onError: (err: Error) => toast.error(t('providerForm.deleteFailed', { msg: err.message })),
+  })
+}
+
+export function useMarketModels(category: string, q: string) {
+  return useQuery({
+    queryKey: queryKeys.market(category, q),
+    queryFn: () => api.listMarketModels(category, q),
+    placeholderData: (prev) => prev,
+  })
+}
+
+export function useMarketCategories() {
+  return useQuery({ queryKey: queryKeys.marketCategories, queryFn: api.listMarketCategories })
+}
+
+export function useFetchMarket() {
+  const invalidate = useInvalidate()
+  const { t } = useI18n()
+  return useMutation({
+    mutationFn: api.fetchMarket,
+    onSuccess: (result) => {
+      toast.success(t('market.fetchDone', { count: result.fetched }), {
+        description: t('market.fetchDoneDesc', {
+          categories: result.categories,
+          storages: result.storages.join(', '),
+        }),
+      })
+      invalidate(queryKeys.marketCategories, ['market'] as const)
+    },
+    onError: (err: Error) => toast.error(t('market.fetchFailed', { msg: err.message })),
+  })
+}
+
+export function useSaveMarketSettings() {
+  const invalidate = useInvalidate()
+  const { t } = useI18n()
+  return useMutation({
+    mutationFn: api.saveMarketSettings,
+    onSuccess: () => {
+      toast.success(t('market.settingsSaved'))
+      invalidate(queryKeys.marketCategories, ['market'] as const)
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+}
+
+export function useImportMarketModels() {
+  const invalidate = useInvalidate()
+  const { t } = useI18n()
+  return useMutation({
+    mutationFn: ({ provider, models }: { provider: string; models: string[] }) =>
+      api.importMarketModels(provider, models),
+    onSuccess: (provider, { models }) => {
+      toast.success(t('market.importDone', { count: models.length, name: provider.name }), {
+        description: t('market.importDoneDesc'),
+      })
+      invalidate(queryKeys.providers)
+    },
+    onError: (err: Error) => toast.error(err.message),
   })
 }

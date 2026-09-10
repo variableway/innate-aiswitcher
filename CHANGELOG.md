@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Model Market page** (`/market`): manually pull the public lobehub model catalog (tRPC `market.getModelList`/`getModelCategories`, ~1000 models across ~75 vendors) from the Web UI. Fetched snapshots persist per configuration — SQLite (new `market_models` collection via migration) and/or a JSON file (`~/.innate-aiswitcher/market/models.json`, `AISW_MARKET_DIR` override) — configured through the unused-until-now `settings` KV collection (`GET/PUT /api/aisw/market/settings`). Selected models import into an existing vendor provider in one upsert (`Store.AddModels`, REST `POST /api/aisw/market/import`), joining its model list and sharing its single API key automatically. New `internal/market` client package with unit tests over a fake tRPC server.
+- **TUI: "Import models from market"** action — pick a vendor provider, search the local catalog snapshot (fetched on demand when absent), multi-select models (type-to-filter), and import them in one upsert sharing the provider key. The catalog load/fetch logic lives in `internal/market` (`LoadCatalog`/`FetchAndStore`) and is shared by the REST routes and the TUI.
+
 - **Editable model combobox** on the Configs page: pick a configured model, fetch the vendor's real model list from its API (one click, uses the stored key), or type any name — custom/remote models are auto-registered on the provider (sharing its API key) before generating the preview.
 
 - **Config builder** on the Configs page: pick an agent (claude code / codex / opencode) → provider → model and see the exact config files the session would use (claude `settings.json`, codex `config.toml` + `auth.json`, opencode env), generated live via `adapter.Preview` over the real dry-run pipeline; a "write to disk" button persists the writable files to their whitelisted paths. REST: `GET /api/aisw/config-preview`.

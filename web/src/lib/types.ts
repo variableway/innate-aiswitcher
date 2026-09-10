@@ -73,6 +73,62 @@ export interface ModelsResult {
   message: string
 }
 
+/** One lobehub market catalog entry (model with its vendor/gateway references). */
+export interface MarketModel {
+  id: string
+  identifier: string
+  displayName: string
+  type?: string
+  category: string
+  providerId: string
+  providers?: string[]
+  providerCount?: number
+  contextWindowTokens?: number
+  abilities?: Record<string, boolean>
+  knowledgeCutoff?: string
+  generation?: string
+  family?: string
+  source?: string
+  enabled?: boolean
+}
+
+export interface MarketCategory {
+  category: string
+  count: number
+}
+
+export type MarketStorage = 'sqlite' | 'file' | 'both'
+
+export interface MarketSettings {
+  storage: MarketStorage
+  source_url?: string
+  locale?: string
+}
+
+export interface MarketModelsResponse {
+  items: MarketModel[]
+  total: number
+  storage: MarketStorage
+  fetchedAt: string
+  hasData: boolean
+}
+
+export interface MarketCategoriesResponse {
+  categories: MarketCategory[]
+  storage: MarketStorage
+  fetchedAt: string
+  hasData: boolean
+}
+
+export interface MarketFetchResponse {
+  ok: boolean
+  fetched: number
+  totalCount: number
+  categories: number
+  storages: string[]
+  fetchedAt: string
+}
+
 /** Agents each wire protocol can serve — mirrors internal/providerconfig. */
 export const PROTOCOL_AGENTS: Record<string, string[]> = {
   anthropic: ['claude'],

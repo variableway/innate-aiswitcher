@@ -148,6 +148,32 @@ func (s *Store) AddModel(slug, model string, setDefault bool) (*Provider, error)
 	return s.UpsertProvider(*provider)
 }
 
+// AddModels appends several models to the provider's model list in a single
+// upsert (batch companion of AddModel). Like AddModel it keeps the vendor's
+// stored API key shared across every model — no extra key configuration.
+func (s *Store) AddModels(slug string, models []string) (*Provider, error) {
+	provider, err := s.GetProvider(slug)
+	if err != nil || provider == nil {
+		return nil, fmt.Errorf("provider not found: %s", slug)
+	}
+	changed := false
+	for _, model := range models {
+		model = strings.TrimSpace(model)
+		if model == "" || provider.HasModel(model) {
+			continue
+		}
+		provider.Models = append(provider.Models, model)
+		changed = true
+	}
+	if !changed {
+		return provider, nil
+	}
+	if provider.DefaultModel == "" && len(provider.Models) > 0 {
+		provider.DefaultModel = provider.Models[0]
+	}
+	return s.UpsertProvider(*provider)
+}
+
 // RemoveModel drops a model from the provider's model list. When the removed
 // model was the default, the first remaining model becomes the default.
 func (s *Store) RemoveModel(slug, model string) (*Provider, error) {

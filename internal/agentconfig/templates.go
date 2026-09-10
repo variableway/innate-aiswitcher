@@ -7,7 +7,7 @@ package agentconfig
 
 // AgentTemplate is one settings template file for an agent.
 type AgentTemplate struct {
-	Name    string `json:"name"`  // whitelist key for write-to-disk, empty if env-only
+	Name    string `json:"name"` // whitelist key for write-to-disk, empty if env-only
 	Label   string `json:"label"`
 	Lang    string `json:"lang"`
 	Content string `json:"content"`

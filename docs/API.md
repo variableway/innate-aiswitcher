@@ -307,6 +307,80 @@ DELETE /api/aisw/profiles/{slug}
 
 ---
 
+## Model Market
+
+模型市场目录功能：从 lobehub 公共目录拉取模型参考数据，按配置保存到 SQLite 和/或 JSON 文件，并把选中模型导入厂商 Provider（共享其 API Key）。
+
+### Get Market Settings
+
+```http
+GET /api/aisw/market/settings
+```
+
+**Response:**
+
+```json
+{ "storage": "sqlite", "source_url": "https://app.lobehub.com/trpc/lambda", "locale": "zh-CN" }
+```
+
+`storage` 取值：`sqlite`（默认，PocketBase `market_models` 集合）/ `file`（`~/.innate-aiswitcher/market/models.json`，`AISW_MARKET_DIR` 可覆盖）/ `both`。
+
+### Save Market Settings
+
+```http
+PUT /api/aisw/market/settings
+```
+
+**Body:** `{"storage": "both"}` — 非法值回落 `sqlite`，缺省 `source_url`/`locale` 自动补默认值。
+
+### Fetch Market Catalog
+
+```http
+POST /api/aisw/market/fetch
+```
+
+服务端按页（pageSize=100）拉取整个目录并写入配置的后端。**Response:**
+
+```json
+{ "ok": true, "fetched": 1027, "totalCount": 1027, "categories": 75, "storages": ["sqlite"], "fetchedAt": "2026-09-09T14:00:00+08:00" }
+```
+
+### List Market Models
+
+```http
+GET /api/aisw/market/models?category=zhipu&q=glm
+```
+
+`category` 精确匹配厂商；`q` 对 identifier/display_name 做包含匹配。**Response:**
+
+```json
+{ "items": [{ "identifier": "glm-5.3", "displayName": "GLM 5.3", "category": "zhipu", "providers": ["zhipu", "higress"], "contextWindowTokens": 131072, "abilities": {"vision": true} }], "total": 1, "storage": "sqlite", "fetchedAt": "2026-09-09T14:00:00+08:00", "hasData": true }
+```
+
+### List Market Categories
+
+```http
+GET /api/aisw/market/categories
+```
+
+**Response:**
+
+```json
+{ "categories": [{ "category": "zhipu", "count": 33 }], "storage": "sqlite", "fetchedAt": "2026-09-09T14:00:00+08:00", "hasData": true }
+```
+
+### Import Market Models into a Provider
+
+```http
+POST /api/aisw/market/import
+```
+
+**Body:** `{"provider": "glm", "models": ["glm-5.3", "glm-air"]}`
+
+模型加入厂商 Provider 的 `models` 列表（一次 upsert），自动共享该厂商已存的 API Key。返回脱敏后的 Provider。
+
+---
+
 ## PocketBase Collection Endpoints (Read-Only)
 
 标准 PocketBase REST，仅公开读权限：

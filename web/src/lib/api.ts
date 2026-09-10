@@ -1,4 +1,4 @@
-import type { Agent, AgentConfigFile, AgentConfigInfo, ConfigPreview, InstalledAgent, ModelsResult, Preset, Profile, Provider, TestResult } from './types'
+import type { Agent, AgentConfigFile, AgentConfigInfo, ConfigPreview, InstalledAgent, MarketCategoriesResponse, MarketFetchResponse, MarketModelsResponse, MarketSettings, ModelsResult, Preset, Profile, Provider, TestResult } from './types'
 
 const API = '/api/aisw'
 
@@ -86,5 +86,23 @@ export const api = {
     request<AgentConfigFile>(`/agent-configs/${agent}/${name}`, {
       method: 'PUT',
       body: JSON.stringify({ content }),
+    }),
+
+  marketSettings: () => request<MarketSettings>('/market/settings'),
+  saveMarketSettings: (s: MarketSettings) =>
+    request<MarketSettings>('/market/settings', {
+      method: 'PUT',
+      body: JSON.stringify(s),
+    }),
+  fetchMarket: () =>
+    request<MarketFetchResponse>('/market/fetch', { method: 'POST', body: '{}' }),
+  listMarketModels: (category: string, q: string) =>
+    request<MarketModelsResponse>(
+      `/market/models?category=${encodeURIComponent(category)}&q=${encodeURIComponent(q)}`),
+  listMarketCategories: () => request<MarketCategoriesResponse>('/market/categories'),
+  importMarketModels: (provider: string, models: string[]) =>
+    request<Provider>('/market/import', {
+      method: 'POST',
+      body: JSON.stringify({ provider, models }),
     }),
 }

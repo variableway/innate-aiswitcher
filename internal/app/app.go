@@ -27,6 +27,7 @@ import (
 	"github.com/variableway/innate-aiswitcher/internal/agentconfig"
 	"github.com/variableway/innate-aiswitcher/internal/configfile"
 	"github.com/variableway/innate-aiswitcher/internal/httpcheck"
+	"github.com/variableway/innate-aiswitcher/internal/market"
 	"github.com/variableway/innate-aiswitcher/internal/projectconfig"
 	"github.com/variableway/innate-aiswitcher/internal/providerconfig"
 	"github.com/variableway/innate-aiswitcher/internal/store"
@@ -209,6 +210,8 @@ func registerRoutes(pb *pocketbase.PocketBase, opts Options) {
 			registerAgentRoutes(e, pb)
 			// Presets
 			registerPresetRoutes(e, pb)
+			// Model market catalog (lobehub)
+			registerMarketRoutes(e, pb)
 
 			// Serve the web app (Vite + React SPA) with client-side routing
 			// fallback. The mux resolves registered API routes first (most
@@ -570,6 +573,95 @@ func registerPresetRoutes(e *core.ServeEvent, pb *pocketbase.PocketBase) {
 		}
 		result.APIKey = maskAPIKey(result.APIKey)
 		return ev.JSON(http.StatusCreated, result)
+	})
+}
+
+// marketSettingsKey / marketMetaKey live in internal/market (SettingsKey /
+// MetaKey) so the REST routes and the TUI share one implementation; see
+// market.LoadSettings / LoadCatalog / FetchAndStore.
+
+func registerMarketRoutes(e *core.ServeEvent, pb *pocketbase.PocketBase) {
+	// Market settings: storage backend (sqlite/file/both) + catalog source.
+	e.Router.GET("/api/aisw/market/settings", func(ev *core.RequestEvent) error {
+		return ev.JSON(http.StatusOK, market.LoadSettings(store.New(pb)))
+	})
+	e.Router.PUT("/api/aisw/market/settings", func(ev *core.RequestEvent) error {
+		var payload market.Settings
+		if err := json.NewDecoder(ev.Request.Body).Decode(&payload); err != nil {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": "invalid JSON: " + err.Error()})
+		}
+		payload = payload.Normalized()
+		if err := store.New(pb).SetSetting(market.SettingsKey, payload); err != nil {
+			return ev.JSON(http.StatusInternalServerError, map[string]any{"ok": false, "message": err.Error()})
+		}
+		return ev.JSON(http.StatusOK, payload)
+	})
+
+	// Manual full-catalog pull: fetch every page from the configured source
+	// and persist the snapshot to the configured backend(s).
+	e.Router.POST("/api/aisw/market/fetch", func(ev *core.RequestEvent) error {
+		s := store.New(pb)
+		result, err := market.FetchAndStore(ev.Request.Context(), s, market.LoadSettings(s), nil)
+		if err != nil {
+			return ev.JSON(http.StatusBadGateway, map[string]any{"ok": false, "message": err.Error()})
+		}
+		return ev.JSON(http.StatusOK, map[string]any{
+			"ok":         true,
+			"fetched":    result.Fetched,
+			"totalCount": result.TotalCount,
+			"categories": result.Categories,
+			"storages":   result.Storages,
+			"fetchedAt":  result.FetchedAt,
+		})
+	})
+
+	// Catalog reads from the configured backend.
+	e.Router.GET("/api/aisw/market/models", func(ev *core.RequestEvent) error {
+		query := ev.Request.URL.Query()
+		catalog, err := market.LoadCatalog(store.New(pb), market.Filter{
+			Category: query.Get("category"),
+			Query:    query.Get("q"),
+		})
+		if err != nil {
+			return ev.JSON(http.StatusInternalServerError, map[string]any{"ok": false, "message": err.Error()})
+		}
+		return ev.JSON(http.StatusOK, map[string]any{
+			"items":     catalog.Items,
+			"total":     len(catalog.Items),
+			"storage":   catalog.Storage,
+			"fetchedAt": catalog.FetchedAt,
+			"hasData":   catalog.HasData,
+		})
+	})
+	e.Router.GET("/api/aisw/market/categories", func(ev *core.RequestEvent) error {
+		catalog, err := market.LoadCatalog(store.New(pb), market.Filter{})
+		if err != nil {
+			return ev.JSON(http.StatusInternalServerError, map[string]any{"ok": false, "message": err.Error()})
+		}
+		return ev.JSON(http.StatusOK, map[string]any{
+			"categories": market.CategoriesFromModels(catalog.Items),
+			"storage":    catalog.Storage,
+			"fetchedAt":  catalog.FetchedAt,
+			"hasData":    catalog.HasData,
+		})
+	})
+
+	// Import catalog models into an existing vendor provider. The models land
+	// on the provider row, so they share its single API key automatically.
+	e.Router.POST("/api/aisw/market/import", func(ev *core.RequestEvent) error {
+		var payload struct {
+			Provider string   `json:"provider"`
+			Models   []string `json:"models"`
+		}
+		if err := json.NewDecoder(ev.Request.Body).Decode(&payload); err != nil || payload.Provider == "" || len(payload.Models) == 0 {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": "provider and models are required"})
+		}
+		result, err := store.New(pb).AddModels(payload.Provider, payload.Models)
+		if err != nil || result == nil {
+			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": "import failed: " + err.Error()})
+		}
+		result.APIKey = maskAPIKey(result.APIKey)
+		return ev.JSON(http.StatusOK, result)
 	})
 }
 
