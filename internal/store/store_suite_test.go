@@ -154,6 +154,23 @@ var _ = Describe("vendor provider storage", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(saved.Models).To(Equal([]string{"glm-5.2"}))
 		})
+
+		It("adds the first model to a provider with an empty list", func() {
+			empty := glmVendorRow()
+			empty.Models = nil
+			empty.DefaultModel = ""
+			_, err := s.UpsertProvider(empty)
+			Expect(err).NotTo(HaveOccurred())
+
+			saved, err := s.AddModel("glm", "glm-5.3", false)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(saved.Models).To(ConsistOf("glm-5.3"), "empty list means any-model at launch, but an explicit add must land")
+			Expect(saved.DefaultModel).To(Equal("glm-5.3"))
+
+			batched, err := s.AddModels("glm", []string{"glm-5.3", "glm-4.6"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(batched.Models).To(ConsistOf("glm-5.3", "glm-4.6"), "market import relies on batched adds landing")
+		})
 	})
 
 	Describe("removing models", func() {

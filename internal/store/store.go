@@ -5,6 +5,7 @@ package store
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/pocketbase/dbx"
@@ -142,7 +143,9 @@ func (s *Store) AddModel(slug, model string, setDefault bool) (*Provider, error)
 	if model == "" {
 		return nil, fmt.Errorf("model is required")
 	}
-	if !provider.HasModel(model) {
+	// Exact membership, not Provider.HasModel: an empty model list means
+	// "any model" there, which would make the first add a no-op forever.
+	if !slices.Contains(provider.Models, model) {
 		provider.Models = append(provider.Models, model)
 	}
 	if setDefault || provider.DefaultModel == "" {
@@ -162,7 +165,9 @@ func (s *Store) AddModels(slug string, models []string) (*Provider, error) {
 	changed := false
 	for _, model := range models {
 		model = strings.TrimSpace(model)
-		if model == "" || provider.HasModel(model) {
+		// Exact membership — same reasoning as AddModel: HasModel treats an
+		// empty list as "any model" and would silently skip every import.
+		if model == "" || slices.Contains(provider.Models, model) {
 			continue
 		}
 		provider.Models = append(provider.Models, model)
