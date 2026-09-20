@@ -60,6 +60,13 @@ var vendorAliases = map[string][]string{
 	"xiaomi":    {"xiaomi", "xiaomi-token-plan-cn"},
 }
 
+// VendorAliases lists the models.dev vendor ids an aisw provider slug maps
+// to (e.g. glm → zhipuai). Shared with the market catalog so local lookups
+// (offline model dropdowns) resolve the same vendors enrichment does.
+func VendorAliases(slug string) []string {
+	return vendorAliases[slug]
+}
+
 var (
 	cacheMu   sync.Mutex
 	cachedAt  time.Time

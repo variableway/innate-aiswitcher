@@ -309,7 +309,7 @@ DELETE /api/aisw/profiles/{slug}
 
 ## Model Market
 
-模型市场目录功能：从 lobehub 公共目录拉取模型参考数据，按配置保存到 SQLite 和/或 JSON 文件，并把选中模型导入厂商 Provider（共享其 API Key）。
+模型市场目录功能：从 models.dev 开放目录（`api.json`，全量厂商/模型/价格/能力）拉取模型参考数据，按配置保存到 SQLite 和/或 JSON 文件（本地备份，接口不通时读取自动回退本地快照），并把选中模型导入厂商 Provider（共享其 API Key，可选同时设为默认模型）。
 
 ### Get Market Settings
 
@@ -320,10 +320,10 @@ GET /api/aisw/market/settings
 **Response:**
 
 ```json
-{ "storage": "sqlite", "source_url": "https://app.lobehub.com/trpc/lambda", "locale": "zh-CN" }
+{ "storage": "both", "source_url": "https://models.dev/api.json" }
 ```
 
-`storage` 取值：`sqlite`（默认，PocketBase `market_models` 集合）/ `file`（`~/.innate-aiswitcher/market/models.json`，`AISW_MARKET_DIR` 可覆盖）/ `both`。
+`storage` 取值：`sqlite`（PocketBase `market_models` 集合）/ `file`（`~/.innate-aiswitcher/market/models.json`，`AISW_MARKET_DIR` 可覆盖）/ `both`（**默认**，同时写数据库与本地备份文件）。
 
 ### Save Market Settings
 
@@ -331,7 +331,7 @@ GET /api/aisw/market/settings
 PUT /api/aisw/market/settings
 ```
 
-**Body:** `{"storage": "both"}` — 非法值回落 `sqlite`，缺省 `source_url`/`locale` 自动补默认值。
+**Body:** `{"storage": "both"}` — 非法值回落 `sqlite`，缺省 `source_url` 自动补默认值；仍指向旧 lobehub 端点的存量配置会在读取时自动迁移到 models.dev。
 
 ### Fetch Market Catalog
 
@@ -339,11 +339,19 @@ PUT /api/aisw/market/settings
 POST /api/aisw/market/fetch
 ```
 
-服务端按页（pageSize=100）拉取整个目录并写入配置的后端。**Response:**
+服务端一次拉取整个目录文档并写入配置的后端。**Response:**
 
 ```json
-{ "ok": true, "fetched": 1027, "totalCount": 1027, "categories": 75, "storages": ["sqlite"], "fetchedAt": "2026-09-09T14:00:00+08:00" }
+{ "ok": true, "fetched": 7870, "totalCount": 7870, "categories": 222, "storages": ["sqlite", "file (~/.innate-aiswitcher/market/models.json)"], "fetchedAt": "2026-09-20T20:54:21+08:00" }
 ```
+
+### Provider-local Catalog Models
+
+```http
+GET /api/aisw/providers/{slug}/market-models
+```
+
+返回本地快照中该 Provider 对应厂商（经 models.dev 别名映射，如 `glm`→`zhipuai`）的模型 id 列表，已配置的模型除外。供配置页模型下拉在厂商 API 不可达时离线取数。
 
 ### List Market Models
 
@@ -375,9 +383,9 @@ GET /api/aisw/market/categories
 POST /api/aisw/market/import
 ```
 
-**Body:** `{"provider": "glm", "models": ["glm-5.3", "glm-air"]}`
+**Body:** `{"provider": "glm", "models": ["glm-5.3", "glm-air"], "default_model": "glm-5.3"}`
 
-模型加入厂商 Provider 的 `models` 列表（一次 upsert），自动共享该厂商已存的 API Key。返回脱敏后的 Provider。
+模型加入厂商 Provider 的 `models` 列表（一次 upsert），自动共享该厂商已存的 API Key；`default_model` 可选，把其中一个导入模型提升为默认。返回脱敏后的 Provider。
 
 ---
 

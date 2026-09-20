@@ -1,7 +1,10 @@
-// Package market fetches the public lobehub model-market catalog over its
-// tRPC HTTP endpoints (no auth required) and persists snapshots to a JSON
-// file. The catalog is a reference data source: its models can be imported
-// into vendor providers, where they share the provider's single API key.
+// Package market fetches the open models.dev catalog (a single api.json
+// document listing every vendor and model with pricing and capabilities)
+// and persists snapshots locally — the PocketBase SQLite database and/or a
+// JSON file under ~/.innate-aiswitcher/market. The catalog is reference
+// data: its models can be imported into vendor providers, where they share
+// the provider's single API key. When the API is unreachable, reads keep
+// serving from the local snapshot.
 package market
 
 import (
@@ -9,20 +12,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
+	"sort"
+	"strings"
 	"time"
 )
 
-// DefaultBaseURL is the public lobehub tRPC lambda endpoint.
-const DefaultBaseURL = "https://app.lobehub.com/trpc/lambda"
+// DefaultBaseURL is the open models.dev catalog endpoint.
+const DefaultBaseURL = "https://models.dev/api.json"
 
-// DefaultLocale is the catalog locale used for localized description fields.
-const DefaultLocale = "zh-CN"
+// LegacyLobehubURL is the retired lobehub tRPC source. Settings rows that
+// still point at it are migrated to DefaultBaseURL on load.
+const LegacyLobehubURL = "https://app.lobehub.com/trpc/lambda"
 
-// Model mirrors one entry of the lobehub market model list. Identifiers are
-// unique across the catalog; Providers lists every vendor/gateway serving
-// the model (the first entries of a gateway-style catalog such as higress,
-// aihubmix or openrouter).
+// Model mirrors one entry of the models.dev catalog: one vendor's model
+// with its capabilities, context window and pricing.
 type Model struct {
 	ID                  string          `json:"id"`
 	Identifier          string          `json:"identifier"`
@@ -44,8 +47,8 @@ type Model struct {
 	Description         string          `json:"description,omitempty"`
 }
 
-// IsEnabled treats a missing enabled flag as enabled (the catalog defaults
-// to true and only marks deprecated/offline entries explicitly).
+// IsEnabled treats a missing enabled flag as enabled (only models.dev
+// entries carrying a non-empty status — e.g. deprecated — are disabled).
 func (m Model) IsEnabled() bool {
 	return m.Enabled == nil || *m.Enabled
 }
@@ -56,7 +59,8 @@ type Category struct {
 	Count    int    `json:"count"`
 }
 
-// ModelsPage is one page of the paginated model list.
+// ModelsPage describes the fetched catalog. models.dev returns everything
+// in one document, so a fetch is always a single page.
 type ModelsPage struct {
 	Items       []Model `json:"items"`
 	CurrentPage int     `json:"currentPage"`
@@ -65,172 +69,200 @@ type ModelsPage struct {
 	TotalPages  int     `json:"totalPages"`
 }
 
-// ListOptions controls one model-list query. Zero Page/PageSize mean the
-// client defaults (page 1, 100 per page — the largest page the API accepts).
-type ListOptions struct {
-	Page     int
-	PageSize int
-	Category string
-	Query    string
-	Locale   string
-}
-
-// Client talks to a lobehub-compatible market API. The zero value is not
-// usable; use NewClient and override fields as needed.
+// Client talks to a models.dev-compatible catalog API (one GET returning
+// the whole JSON document). The zero value is not usable; use NewClient.
 type Client struct {
 	BaseURL string
-	Locale  string
 	HTTP    *http.Client
 }
 
-// NewClient returns a client pointed at the public lobehub catalog.
+// NewClient returns a client pointed at the public models.dev catalog.
 func NewClient() *Client {
 	return &Client{
 		BaseURL: DefaultBaseURL,
-		Locale:  DefaultLocale,
-		HTTP:    &http.Client{Timeout: 30 * time.Second},
+		HTTP:    &http.Client{Timeout: 60 * time.Second},
 	}
 }
 
-// batchInput is the tRPC batch envelope for a single-procedure GET query:
-// {"0":{"json":{...},"meta":{"values":{"field":["undefined"]},"v":1}}}.
-// Fields listed in meta.values carry a JSON null in the json object.
-type batchInput struct {
-	Zero struct {
-		JSON map[string]any  `json:"json"`
-		Meta *batchInputMeta `json:"meta,omitempty"`
-	} `json:"0"`
+// apiVendor is one vendor entry of the models.dev document; the map key is
+// the vendor id and Name is the display name.
+type apiVendor struct {
+	ID     string              `json:"id"`
+	Name   string              `json:"name"`
+	Models map[string]apiModel `json:"models"`
 }
 
-type batchInputMeta struct {
-	Values map[string][]string `json:"values"`
-	V      int                 `json:"v"`
+// apiModel is one model entry under a models.dev vendor. Field names mirror
+// the upstream schema (see https://models.dev/api.json).
+type apiModel struct {
+	Name             string          `json:"name"`
+	Description      string          `json:"description"`
+	Family           string          `json:"family"`
+	Attachment       bool            `json:"attachment"`
+	Reasoning        bool            `json:"reasoning"`
+	ToolCall         bool            `json:"tool_call"`
+	StructuredOutput bool            `json:"structured_output"`
+	Modalities       *apiModalities  `json:"modalities"`
+	OpenWeights      bool            `json:"open_weights"`
+	Status           string          `json:"status"`
+	Knowledge        string          `json:"knowledge"`
+	ReleaseDate      string          `json:"release_date"`
+	Limit            *apiLimit       `json:"limit"`
+	Cost             json.RawMessage `json:"cost"`
 }
 
-// batchEnvelope is the tRPC batch response wrapper; the procedure payload
-// sits at [0].result.data.json (superjson-encoded).
-type batchEnvelope []struct {
-	Result struct {
-		Data struct {
-			JSON json.RawMessage `json:"json"`
-		} `json:"data"`
-	} `json:"result"`
+// apiModalities is the per-direction modality split models.dev reports.
+type apiModalities struct {
+	Input  []string `json:"input"`
+	Output []string `json:"output"`
 }
 
-// query runs one batched tRPC GET procedure and decodes its data.json into
-// out. undefinedFields lists keys whose value is null.
-func (c *Client) query(ctx context.Context, procedure string, params map[string]any, undefinedFields []string, out any) error {
-	input := batchInput{}
-	input.Zero.JSON = params
-	if len(undefinedFields) > 0 {
-		input.Zero.Meta = &batchInputMeta{Values: map[string][]string{}, V: 1}
-		for _, field := range undefinedFields {
-			input.Zero.Meta.Values[field] = []string{"undefined"}
-		}
-	}
-	encoded, err := json.Marshal(input)
+type apiLimit struct {
+	Context int `json:"context"`
+	Output  int `json:"output"`
+}
+
+// FetchAllModels downloads the whole catalog document and flattens it into
+// one Model per vendor entry — vendors sorted by display name, each
+// vendor's models sorted by id, so snapshots are deterministic.
+func (c *Client) FetchAllModels(ctx context.Context) (*ModelsPage, []Model, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL, nil)
 	if err != nil {
-		return err
-	}
-	endpoint := c.BaseURL + "/" + procedure + "?batch=1&input=" + url.QueryEscape(string(encoded))
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "innate-aiswitcher")
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("market %s: unexpected status %d", procedure, resp.StatusCode)
+		return nil, nil, fmt.Errorf("market fetch: unexpected status %d", resp.StatusCode)
 	}
 
-	var envelope batchEnvelope
-	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
-		return fmt.Errorf("market %s: invalid response: %w", procedure, err)
+	var vendors map[string]apiVendor
+	if err := json.NewDecoder(resp.Body).Decode(&vendors); err != nil {
+		return nil, nil, fmt.Errorf("market fetch: invalid catalog document: %w", err)
 	}
-	if len(envelope) == 0 {
-		return fmt.Errorf("market %s: empty batch response", procedure)
+
+	items := flattenCatalog(vendors)
+	page := &ModelsPage{
+		Items:       items,
+		CurrentPage: 1,
+		PageSize:    len(items),
+		TotalCount:  len(items),
+		TotalPages:  1,
 	}
-	if len(envelope[0].Result.Data.JSON) == 0 {
-		return fmt.Errorf("market %s: missing result data", procedure)
-	}
-	if err := json.Unmarshal(envelope[0].Result.Data.JSON, out); err != nil {
-		return fmt.Errorf("market %s: decode result: %w", procedure, err)
-	}
-	return nil
+	return page, items, nil
 }
 
-// FetchCategories returns the vendor categories with their model counts.
-func (c *Client) FetchCategories(ctx context.Context) ([]Category, error) {
-	var categories []Category
-	err := c.query(ctx, "market.getModelCategories", map[string]any{"q": nil}, []string{"q"}, &categories)
-	return categories, err
+// flattenCatalog maps the models.dev document onto catalog Model entries.
+func flattenCatalog(vendors map[string]apiVendor) []Model {
+	ordered := make([]apiVendor, 0, len(vendors))
+	for id, vendor := range vendors {
+		if vendor.ID == "" {
+			vendor.ID = id
+		}
+		if len(vendor.Models) == 0 {
+			continue
+		}
+		ordered = append(ordered, vendor)
+	}
+	sort.Slice(ordered, func(i, j int) bool {
+		if ordered[i].Name != ordered[j].Name {
+			return ordered[i].Name < ordered[j].Name
+		}
+		return ordered[i].ID < ordered[j].ID
+	})
+
+	items := make([]Model, 0, 512)
+	for _, vendor := range ordered {
+		category := vendor.Name
+		if category == "" {
+			category = vendor.ID
+		}
+		ids := make([]string, 0, len(vendor.Models))
+		for id := range vendor.Models {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		for _, id := range ids {
+			entry := vendor.Models[id]
+			items = append(items, catalogModel(vendor, id, entry))
+		}
+	}
+	return items
 }
 
-// FetchModelsPage returns one page of the model list.
-func (c *Client) FetchModelsPage(ctx context.Context, opts ListOptions) (*ModelsPage, error) {
-	if opts.Page <= 0 {
-		opts.Page = 1
+func catalogModel(vendor apiVendor, id string, entry apiModel) Model {
+	display := entry.Name
+	if display == "" {
+		display = id
 	}
-	if opts.PageSize <= 0 {
-		opts.PageSize = 100
+	abilities := map[string]bool{}
+	if entry.ToolCall {
+		abilities["tool_call"] = true
 	}
-	locale := opts.Locale
-	if locale == "" {
-		locale = c.Locale
+	if entry.Reasoning {
+		abilities["reasoning"] = true
 	}
-
-	params := map[string]any{"page": opts.Page, "pageSize": opts.PageSize, "locale": locale}
-	undefined := []string{}
-	for field, value := range map[string]*string{
-		"category": &opts.Category,
-		"order":    nil,
-		"q":        &opts.Query,
-		"sort":     nil,
-	} {
-		if value == nil || *value == "" {
-			params[field] = nil
-			undefined = append(undefined, field)
-		} else {
-			params[field] = *value
-		}
+	if entry.StructuredOutput {
+		abilities["structured_output"] = true
+	}
+	if entry.Attachment || acceptsImage(entry.Modalities) {
+		abilities["multimodal"] = true
+	}
+	if entry.OpenWeights {
+		abilities["open_weights"] = true
 	}
 
-	var page ModelsPage
-	if err := c.query(ctx, "market.getModelList", params, undefined, &page); err != nil {
-		return nil, err
+	model := Model{
+		ID:              vendor.ID + "/" + id,
+		Identifier:      id,
+		DisplayName:     display,
+		Category:        vendor.Name,
+		ProviderID:      vendor.ID,
+		Providers:       []string{vendor.ID},
+		ProviderCount:   1,
+		Abilities:       abilities,
+		KnowledgeCutoff: entry.Knowledge,
+		Family:          entry.Family,
+		ReleasedAt:      entry.ReleaseDate,
+		Description:     entry.Description,
 	}
-	return &page, nil
+	if model.Category == "" {
+		model.Category = vendor.ID
+	}
+	if entry.Limit != nil {
+		model.ContextWindowTokens = entry.Limit.Context
+	}
+	if len(entry.Cost) > 0 && string(entry.Cost) != "null" {
+		model.Pricing = entry.Cost
+	}
+	if entry.Status != "" {
+		disabled := false
+		model.Enabled = &disabled
+	}
+	return model
 }
 
-// FetchAllModels pages through the whole catalog (pageSize 100) and returns
-// every model. Requests are spaced 200ms apart to stay gentle on the API.
-func (c *Client) FetchAllModels(ctx context.Context) (*ModelsPage, []Model, error) {
-	first, err := c.FetchModelsPage(ctx, ListOptions{Page: 1, PageSize: 100})
-	if err != nil {
-		return nil, nil, err
+// acceptsImage reports whether any modality direction handles images.
+func acceptsImage(modalities *apiModalities) bool {
+	if modalities == nil {
+		return false
 	}
-	items := make([]Model, 0, first.TotalCount)
-	items = append(items, first.Items...)
-	for page := 2; page <= first.TotalPages; page++ {
-		select {
-		case <-ctx.Done():
-			return first, items, ctx.Err()
-		case <-time.After(200 * time.Millisecond):
+	return hasModality(modalities.Input, "image") || hasModality(modalities.Output, "image")
+}
+
+func hasModality(modalities []string, want string) bool {
+	for _, modality := range modalities {
+		if strings.EqualFold(modality, want) {
+			return true
 		}
-		result, err := c.FetchModelsPage(ctx, ListOptions{Page: page, PageSize: 100})
-		if err != nil {
-			return first, items, err
-		}
-		items = append(items, result.Items...)
 	}
-	return first, items, nil
+	return false
 }
 
 // CategoriesFromModels derives the vendor category summary from a fetched
@@ -246,10 +278,6 @@ func CategoriesFromModels(items []Model) []Category {
 	for name, count := range counts {
 		categories = append(categories, Category{Category: name, Count: count})
 	}
-	for i := 1; i < len(categories); i++ {
-		for j := i; j > 0 && categories[j-1].Category > categories[j].Category; j-- {
-			categories[j-1], categories[j] = categories[j], categories[j-1]
-		}
-	}
+	sort.Slice(categories, func(i, j int) bool { return categories[i].Category < categories[j].Category })
 	return categories
 }

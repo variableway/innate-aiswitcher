@@ -17,20 +17,21 @@ type Settings struct {
 	Locale    string `json:"locale,omitempty"`
 }
 
-// DefaultSettings returns the stock configuration: persist to the PocketBase
-// SQLite database, pull from the public lobehub catalog.
+// DefaultSettings returns the stock configuration: persist to BOTH the
+// PocketBase SQLite database (fast queries) and the local JSON file
+// (durable backup under ~/.innate-aiswitcher/market that survives pb_data
+// resets and serves offline reads), pulling from the public models.dev
+// catalog.
 func DefaultSettings() Settings {
-	return Settings{Storage: StorageSQLite, SourceURL: DefaultBaseURL, Locale: DefaultLocale}
+	return Settings{Storage: StorageBoth, SourceURL: DefaultBaseURL}
 }
 
-// Normalized returns the settings with defaults filled in and the storage
-// value validated (an invalid value falls back to sqlite).
+// Normalized returns the settings with defaults filled in, the storage
+// value validated (an invalid value falls back to sqlite) and the retired
+// lobehub source migrated to models.dev.
 func (s Settings) Normalized() Settings {
-	if s.SourceURL == "" {
+	if s.SourceURL == "" || s.SourceURL == LegacyLobehubURL {
 		s.SourceURL = DefaultBaseURL
-	}
-	if s.Locale == "" {
-		s.Locale = DefaultLocale
 	}
 	switch strings.ToLower(strings.TrimSpace(s.Storage)) {
 	case StorageSQLite:

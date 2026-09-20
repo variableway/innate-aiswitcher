@@ -76,7 +76,10 @@ func LoadSettings(s SettingsStore) Settings {
 }
 
 // LoadCatalog reads the catalog from the backend configured in the market
-// settings (sqlite preferred, file snapshot otherwise).
+// settings (sqlite preferred, file snapshot otherwise). When the sqlite
+// snapshot is empty — fresh pb_data, or the fetch never ran — the local
+// file backup serves the read instead, so the catalog keeps working
+// offline and across database resets.
 func LoadCatalog(s CatalogStore, filter Filter) (*Catalog, error) {
 	settings := LoadSettings(s)
 	catalog := &Catalog{Storage: settings.Storage}
@@ -93,6 +96,18 @@ func LoadCatalog(s CatalogStore, filter Filter) (*Catalog, error) {
 			return nil, err
 		}
 		catalog.Items = items
+		if catalog.HasData {
+			return catalog, nil
+		}
+		// No sqlite snapshot yet — fall through to the file backup.
+		snapshot, err := LoadFile()
+		if err != nil || snapshot == nil || len(snapshot.Items) == 0 {
+			if err != nil {
+				return nil, err
+			}
+			return catalog, nil
+		}
+		applySnapshot(catalog, snapshot, filter)
 		return catalog, nil
 	}
 
@@ -104,9 +119,17 @@ func LoadCatalog(s CatalogStore, filter Filter) (*Catalog, error) {
 		catalog.Items = []Model{}
 		return catalog, nil
 	}
+	applySnapshot(catalog, snapshot, filter)
+	return catalog, nil
+}
+
+// applySnapshot fills the catalog from a file snapshot, honoring the filter.
+func applySnapshot(catalog *Catalog, snapshot *Snapshot, filter Filter) {
+	catalog.Storage = StorageFile
 	catalog.FetchedAt = snapshot.FetchedAt
 	catalog.HasData = true
 	query := strings.ToLower(strings.TrimSpace(filter.Query))
+	catalog.Items = []Model{}
 	for _, item := range snapshot.Items {
 		if filter.Category != "" && item.Category != filter.Category {
 			continue
@@ -118,7 +141,6 @@ func LoadCatalog(s CatalogStore, filter Filter) (*Catalog, error) {
 		}
 		catalog.Items = append(catalog.Items, item)
 	}
-	return catalog, nil
 }
 
 // FetchAndStore pulls the whole catalog from the configured source and
@@ -130,7 +152,6 @@ func FetchAndStore(ctx context.Context, s FetchStore, settings Settings, httpCli
 		client.HTTP = httpClient
 	}
 	client.BaseURL = settings.SourceURL
-	client.Locale = settings.Locale
 
 	first, items, err := client.FetchAllModels(ctx)
 	if err != nil {

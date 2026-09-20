@@ -3,7 +3,6 @@ package market
 import (
 	"context"
 	"encoding/json"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -57,6 +56,8 @@ func (f *fakeCatalogStore) ReplaceMarketModels(items []Model) error {
 }
 
 func TestLoadCatalogDefaultsToEmptyWithoutData(t *testing.T) {
+	// Isolate from any real ~/.innate-aiswitcher snapshot on the machine.
+	t.Setenv("AISW_MARKET_DIR", t.TempDir())
 	store := &fakeCatalogStore{settings: map[string]any{}}
 	catalog, err := LoadCatalog(store, Filter{})
 	if err != nil {
@@ -65,8 +66,8 @@ func TestLoadCatalogDefaultsToEmptyWithoutData(t *testing.T) {
 	if catalog.HasData || len(catalog.Items) != 0 {
 		t.Fatalf("expected empty catalog, got %+v", catalog)
 	}
-	if catalog.Storage != StorageSQLite {
-		t.Fatalf("default storage must be sqlite, got %q", catalog.Storage)
+	if catalog.Storage != StorageBoth {
+		t.Fatalf("default storage must be both (sqlite + file backup), got %q", catalog.Storage)
 	}
 }
 
@@ -114,12 +115,7 @@ func TestLoadCatalogReadsFileBackend(t *testing.T) {
 }
 
 func TestFetchAndStorePersistsToBothBackends(t *testing.T) {
-	fake := &fakeMarket{pages: map[int][]Model{
-		1: {testModel("glm-5.2", "zhipu"), testModel("glm-5.3", "zhipu")},
-		2: {testModel("MiniMax-M3", "minimax")},
-	}}
-	server := httptest.NewServer(fake.handler(t))
-	defer server.Close()
+	server := serveCatalog(t)
 
 	dir := t.TempDir()
 	t.Setenv("AISW_MARKET_DIR", dir)
@@ -151,7 +147,7 @@ func TestFetchAndStorePersistsToBothBackends(t *testing.T) {
 	}
 
 	// reads flow through the configured backend
-	catalog, err := LoadCatalog(store, Filter{Category: "minimax"})
+	catalog, err := LoadCatalog(store, Filter{Category: "MiniMax"})
 	if err != nil || len(catalog.Items) != 1 {
 		t.Fatalf("post-fetch read failed: %v %+v", err, catalog)
 	}

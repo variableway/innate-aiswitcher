@@ -7,159 +7,112 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-// fakeMarket serves lobehub-shaped tRPC batch envelopes for the client tests.
-type fakeMarket struct {
-	pages    map[int][]Model
-	requests []map[string]any
+// catalogDoc is a miniature models.dev api.json document: two vendors with
+// different shapes (full metadata vs minimal + deprecated status).
+const catalogDoc = `{
+  "minimax": {
+    "id": "minimax", "name": "MiniMax",
+    "models": {
+      "MiniMax-M3": {
+        "name": "MiniMax M3", "description": "flagship",
+        "tool_call": true, "reasoning": true, "structured_output": false,
+        "attachment": true, "modalities": {"input": ["text", "image"], "output": ["text"]},
+        "knowledge": "2025-06", "release_date": "2025-09-01",
+        "limit": {"context": 1000000, "output": 131072},
+        "cost": {"input": 0.4, "output": 1.6, "cache_read": 0.04}
+      }
+    }
+  },
+  "zhipuai": {
+    "id": "zhipuai", "name": "Zhipu AI",
+    "models": {
+      "glm-5.2": {"name": "GLM-5.2", "tool_call": true, "open_weights": true},
+      "glm-4-old": {"name": "GLM 4 old", "status": "deprecated"}
+    }
+  }
+}`
+
+func serveCatalog(t *testing.T) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(catalogDoc))
+	}))
+	t.Cleanup(server.Close)
+	return server
 }
 
-func (f *fakeMarket) handler(t *testing.T) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var input map[string]any
-		if err := json.Unmarshal([]byte(r.URL.Query().Get("input")), &input); err != nil {
-			t.Errorf("invalid input param: %v", err)
-			http.Error(w, "bad input", http.StatusBadRequest)
-			return
-		}
-		f.requests = append(f.requests, input)
-
-		zero := input["0"].(map[string]any)
-		params := zero["json"].(map[string]any)
-
-		var payload any
-		var page int
-		if r.URL.Path == "/market.getModelCategories" {
-			payload = []Category{{Category: "zhipu", Count: 2}, {Category: "minimax", Count: 1}}
-		} else {
-			page = int(params["page"].(float64))
-			items := f.pages[page]
-			if items == nil {
-				items = []Model{}
-			}
-			payload = ModelsPage{
-				Items: items, CurrentPage: page, PageSize: 100,
-				TotalCount: 3, TotalPages: len(f.pages),
-			}
-		}
-		_ = json.NewEncoder(w).Encode([]map[string]any{{
-			"result": map[string]any{"data": map[string]any{"json": payload}},
-		}})
-	}
-}
-
-func testModel(identifier, category string) Model {
-	enabled := true
-	return Model{
-		ID: identifier, Identifier: identifier, DisplayName: "Model " + identifier,
-		Category: category, ProviderID: category, Providers: []string{category},
-		ProviderCount: 1, ContextWindowTokens: 128000, Enabled: &enabled,
-		Abilities: map[string]bool{"functionCall": true},
-	}
-}
-
-func TestFetchAllModelsPagesThroughCatalog(t *testing.T) {
-	fake := &fakeMarket{pages: map[int][]Model{
-		1: {testModel("glm-5.2", "zhipu"), testModel("glm-5.3", "zhipu")},
-		2: {testModel("MiniMax-M3", "minimax")},
-	}}
-	server := httptest.NewServer(fake.handler(t))
-	defer server.Close()
-
+func TestFetchAllModelsFlattensCatalog(t *testing.T) {
+	server := serveCatalog(t)
 	client := NewClient()
 	client.BaseURL = server.URL
+
 	first, items, err := client.FetchAllModels(context.Background())
 	if err != nil {
 		t.Fatalf("FetchAllModels: %v", err)
 	}
-	if first.TotalCount != 3 || len(items) != 3 {
-		t.Fatalf("expected 3 models across 2 pages, got first=%+v items=%d", first.TotalCount, len(items))
+	if first.TotalCount != 3 || len(items) != 3 || first.TotalPages != 1 {
+		t.Fatalf("expected all 3 models in one page, got first=%+v items=%d", first, len(items))
 	}
-	if items[2].Identifier != "MiniMax-M3" || items[2].Category != "minimax" {
-		t.Fatalf("page-2 model not decoded correctly: %+v", items[2])
+
+	// Vendors sort by display name: MiniMax before Zhipu AI.
+	if items[0].Category != "MiniMax" || items[0].Identifier != "MiniMax-M3" {
+		t.Fatalf("first item must be MiniMax's model, got %+v", items[0])
 	}
-	if items[0].Abilities["functionCall"] != true {
-		t.Fatalf("abilities not decoded: %+v", items[0].Abilities)
+	m3 := items[0]
+	if m3.ID != "minimax/MiniMax-M3" || m3.ProviderID != "minimax" {
+		t.Fatalf("ids not mapped: %+v", m3)
 	}
-	if len(fake.requests) != 2 {
-		t.Fatalf("expected 2 requests (one per page), got %d", len(fake.requests))
+	if m3.DisplayName != "MiniMax M3" || m3.ContextWindowTokens != 1000000 {
+		t.Fatalf("display/context not mapped: %+v", m3)
+	}
+	if !m3.Abilities["tool_call"] || !m3.Abilities["reasoning"] || !m3.Abilities["multimodal"] {
+		t.Fatalf("abilities not mapped: %+v", m3.Abilities)
+	}
+	if m3.Abilities["structured_output"] {
+		t.Fatalf("structured_output=false must stay absent: %+v", m3.Abilities)
+	}
+	var pricing struct {
+		Input  float64 `json:"input"`
+		Output float64 `json:"output"`
+	}
+	if err := json.Unmarshal(m3.Pricing, &pricing); err != nil || pricing.Input != 0.4 || pricing.Output != 1.6 {
+		t.Fatalf("pricing not passed through: %s (%v)", m3.Pricing, err)
+	}
+	if m3.KnowledgeCutoff != "2025-06" || m3.ReleasedAt != "2025-09-01" || m3.Description != "flagship" {
+		t.Fatalf("metadata not mapped: %+v", m3)
+	}
+	if !m3.IsEnabled() {
+		t.Fatalf("model without status must be enabled: %+v", m3)
+	}
+
+	// glm-4-old carries a status and must be disabled; zhipuai models sort
+	// by id within the vendor (glm-4-old before glm-5.2).
+	old := items[1]
+	if old.Identifier != "glm-4-old" || old.IsEnabled() {
+		t.Fatalf("status-marked model must be disabled: %+v", old)
+	}
+	if items[2].Identifier != "glm-5.2" {
+		t.Fatalf("models within a vendor must sort by id: %s, %s", items[1].Identifier, items[2].Identifier)
 	}
 }
 
-func TestFetchModelsPageMarksUndefinedFields(t *testing.T) {
-	var captured map[string]any
+func TestFetchAllModelsRejectsNonOKStatus(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.Unmarshal([]byte(r.URL.Query().Get("input")), &captured)
-		_ = json.NewEncoder(w).Encode([]map[string]any{{
-			"result": map[string]any{"data": map[string]any{"json": ModelsPage{Items: []Model{}, TotalPages: 1}}},
-		}})
+		http.Error(w, "boom", http.StatusInternalServerError)
 	}))
 	defer server.Close()
 
 	client := NewClient()
 	client.BaseURL = server.URL
-	if _, err := client.FetchModelsPage(context.Background(), ListOptions{Category: "zhipu"}); err != nil {
-		t.Fatalf("FetchModelsPage: %v", err)
-	}
-
-	zero := captured["0"].(map[string]any)
-	params := zero["json"].(map[string]any)
-	if params["category"] != "zhipu" {
-		t.Fatalf("category filter not sent: %v", params)
-	}
-	if _, hasMeta := zero["meta"]; !hasMeta {
-		t.Fatalf("undefined fields must be listed in meta.values")
-	}
-	meta := zero["meta"].(map[string]any)
-	values := meta["values"].(map[string]any)
-	for _, field := range []string{"q", "order", "sort"} {
-		if _, ok := values[field]; !ok {
-			t.Fatalf("field %s must be marked undefined, got meta %v", field, values)
-		}
-	}
-	if _, ok := values["category"]; ok {
-		t.Fatalf("category is set, must not be marked undefined")
-	}
-}
-
-func TestFetchCategoriesDecodesCounts(t *testing.T) {
-	fake := &fakeMarket{}
-	server := httptest.NewServer(fake.handler(t))
-	defer server.Close()
-
-	client := NewClient()
-	client.BaseURL = server.URL
-	categories, err := client.FetchCategories(context.Background())
-	if err != nil {
-		t.Fatalf("FetchCategories: %v", err)
-	}
-	if len(categories) != 2 || categories[0].Category != "zhipu" || categories[0].Count != 2 {
-		t.Fatalf("unexpected categories: %+v", categories)
-	}
-}
-
-func TestCategoriesFromModelsSortsAndCounts(t *testing.T) {
-	items := []Model{
-		testModel("a1", "zhipu"), testModel("a2", "zhipu"), testModel("b1", "minimax"),
-	}
-	categories := CategoriesFromModels(items)
-	if len(categories) != 2 || categories[0].Category != "minimax" || categories[0].Count != 1 {
-		t.Fatalf("categories not sorted/counted: %+v", categories)
-	}
-	if categories[1].Category != "zhipu" || categories[1].Count != 2 {
-		t.Fatalf("categories not sorted/counted: %+v", categories)
-	}
-}
-
-func TestModelIsEnabledDefaultsTrue(t *testing.T) {
-	if !(Model{Identifier: "x"}).IsEnabled() {
-		t.Fatal("missing enabled flag must default to enabled")
-	}
-	disabled := false
-	if (Model{Identifier: "x", Enabled: &disabled}).IsEnabled() {
-		t.Fatal("explicitly disabled model must report disabled")
+	if _, _, err := client.FetchAllModels(context.Background()); err == nil {
+		t.Fatal("non-200 status must fail the fetch")
+	} else if !strings.Contains(err.Error(), "500") {
+		t.Fatalf("error must mention the status: %v", err)
 	}
 }
 
@@ -170,15 +123,82 @@ func TestSettingsNormalization(t *testing.T) {
 	if got := (Settings{Storage: "file"}).Normalized(); !got.UsesFile() || got.UsesSQLite() {
 		t.Fatalf("file storage misconfigured: %+v", got)
 	}
-	both := Settings{Storage: "BOTH", SourceURL: "", Locale: ""}
+	both := Settings{Storage: "BOTH", SourceURL: ""}
 	if !both.Normalized().UsesSQLite() || !both.Normalized().UsesFile() {
 		t.Fatal("both storage must write to sqlite and file")
 	}
 	if got := both.Normalized().SourceURL; got != DefaultBaseURL {
-		t.Fatalf("empty source must default to lobehub, got %q", got)
+		t.Fatalf("empty source must default to models.dev, got %q", got)
 	}
 	if got := (Settings{Storage: "nonsense"}).Normalized().Storage; got != StorageSQLite {
 		t.Fatalf("invalid storage must fall back to sqlite, got %q", got)
+	}
+	if got := (Settings{SourceURL: LegacyLobehubURL}).Normalized().SourceURL; got != DefaultBaseURL {
+		t.Fatalf("legacy lobehub source must migrate to models.dev, got %q", got)
+	}
+	if got := (Settings{SourceURL: "https://example.test/catalog.json"}).Normalized().SourceURL; got != "https://example.test/catalog.json" {
+		t.Fatalf("custom source must be preserved, got %q", got)
+	}
+	if got := DefaultSettings(); !got.UsesSQLite() || !got.UsesFile() {
+		t.Fatalf("default settings must back up to both backends: %+v", got)
+	}
+}
+
+// testModel builds a minimal catalog entry for the persistence tests.
+func testModel(identifier, category string) Model {
+	enabled := true
+	return Model{
+		ID: category + "/" + identifier, Identifier: identifier, DisplayName: "Model " + identifier,
+		Category: category, ProviderID: category, Providers: []string{category},
+		ProviderCount: 1, ContextWindowTokens: 128000, Enabled: &enabled,
+		Abilities: map[string]bool{"tool_call": true},
+	}
+}
+
+func TestLoadCatalogFallsBackToFileSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("AISW_MARKET_DIR", dir)
+
+	snapshot := &Snapshot{
+		Source: "test", Locale: "zh-CN", TotalCount: 1, ItemCount: 1, CategoryCount: 1,
+		Items: []Model{
+			{Identifier: "glm-5.2", DisplayName: "GLM 5.2", Category: "Zhipu AI", ProviderID: "zhipuai"},
+			{Identifier: "MiniMax-M3", DisplayName: "MiniMax M3", Category: "MiniMax", ProviderID: "minimax"},
+		},
+	}
+	if _, err := SaveFile(snapshot); err != nil {
+		t.Fatalf("SaveFile: %v", err)
+	}
+
+	catalog, err := LoadCatalog(&fakeCatalogStore{}, Filter{})
+	if err != nil {
+		t.Fatalf("LoadCatalog: %v", err)
+	}
+	if len(catalog.Items) != 2 || catalog.Items[0].Identifier != "glm-5.2" {
+		t.Fatalf("file snapshot must serve the read: %+v", catalog.Items)
+	}
+	if !catalog.HasData || catalog.Storage != StorageFile {
+		t.Fatalf("fallback must mark hasData + file storage: %+v", catalog)
+	}
+
+	filtered, err := LoadCatalog(&fakeCatalogStore{}, Filter{Category: "MiniMax"})
+	if err != nil {
+		t.Fatalf("LoadCatalog filtered: %v", err)
+	}
+	if len(filtered.Items) != 1 || filtered.Items[0].Identifier != "MiniMax-M3" {
+		t.Fatalf("category filter must apply to the fallback: %+v", filtered.Items)
+	}
+}
+
+func TestLoadCatalogWithoutAnySnapshotIsEmpty(t *testing.T) {
+	t.Setenv("AISW_MARKET_DIR", t.TempDir())
+
+	catalog, err := LoadCatalog(&fakeCatalogStore{}, Filter{})
+	if err != nil {
+		t.Fatalf("LoadCatalog: %v", err)
+	}
+	if catalog.HasData || len(catalog.Items) != 0 {
+		t.Fatalf("no snapshot anywhere must be empty + hasData=false: %+v", catalog)
 	}
 }
 
@@ -186,9 +206,13 @@ func TestFileStoreRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("AISW_MARKET_DIR", dir)
 
+	enabled := true
 	snapshot := &Snapshot{
 		Source: "test", Locale: "zh-CN", TotalCount: 1, ItemCount: 1, CategoryCount: 1,
-		Items: []Model{testModel("glm-5.2", "zhipu")},
+		Items: []Model{{
+			ID: "zhipuai/glm-5.2", Identifier: "glm-5.2", DisplayName: "GLM 5.2",
+			Category: "Zhipu AI", ProviderID: "zhipuai", Enabled: &enabled,
+		}},
 	}
 	path, err := SaveFile(snapshot)
 	if err != nil {
@@ -219,5 +243,30 @@ func TestLoadFileMissingReturnsNil(t *testing.T) {
 	loaded, err := LoadFile()
 	if err != nil || loaded != nil {
 		t.Fatalf("missing snapshot must return (nil, nil), got (%v, %v)", loaded, err)
+	}
+}
+
+func TestModelIsEnabledDefaultsTrue(t *testing.T) {
+	if !(Model{Identifier: "x"}).IsEnabled() {
+		t.Fatal("missing enabled flag must default to enabled")
+	}
+	disabled := false
+	if (Model{Identifier: "x", Enabled: &disabled}).IsEnabled() {
+		t.Fatal("explicitly disabled model must report disabled")
+	}
+}
+
+func TestCategoriesFromModelsSortsAndCounts(t *testing.T) {
+	items := []Model{
+		{Identifier: "a1", Category: "Zhipu AI"},
+		{Identifier: "a2", Category: "Zhipu AI"},
+		{Identifier: "b1", Category: "MiniMax"},
+	}
+	categories := CategoriesFromModels(items)
+	if len(categories) != 2 || categories[0].Category != "MiniMax" || categories[0].Count != 1 {
+		t.Fatalf("categories not sorted/counted: %+v", categories)
+	}
+	if categories[1].Category != "Zhipu AI" || categories[1].Count != 2 {
+		t.Fatalf("categories not sorted/counted: %+v", categories)
 	}
 }

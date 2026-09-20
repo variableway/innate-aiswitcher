@@ -191,7 +191,7 @@ func Run(s *store.Store) error {
 // the search prompt narrows the list below it.
 const marketPickLimit = 100
 
-// importMarketModels pulls models from the local market catalog (lobehub
+// importMarketModels pulls models from the local market catalog (models.dev
 // snapshot fetched via the Web UI or fetched on demand) into a vendor
 // provider. Imported models join the provider's model list and share its
 // single API key, exactly like `aisw provider model add`.
@@ -204,7 +204,7 @@ func importMarketModels(s *store.Store, providers []store.Provider) error {
 		fmt.Println("No local market catalog data yet.")
 		var fetchNow bool
 		if err := huh.NewForm(huh.NewGroup(
-			huh.NewConfirm().Title("Fetch the catalog from lobehub now?").Affirmative("fetch").Negative("cancel").Value(&fetchNow),
+			huh.NewConfirm().Title("Fetch the catalog from models.dev now?").Affirmative("fetch").Negative("cancel").Value(&fetchNow),
 		)).Run(); err != nil {
 			return err
 		}

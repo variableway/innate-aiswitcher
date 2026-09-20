@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -213,7 +214,7 @@ func registerRoutes(pb *pocketbase.PocketBase, opts Options) {
 			registerAgentRoutes(e, pb)
 			// Presets
 			registerPresetRoutes(e, pb)
-			// Model market catalog (lobehub)
+			// Model market catalog (models.dev, locally snapshotted)
 			registerMarketRoutes(e, pb)
 
 			// Serve the web app (Vite + React SPA) with client-side routing
@@ -675,20 +676,63 @@ func registerMarketRoutes(e *core.ServeEvent, pb *pocketbase.PocketBase) {
 
 	// Import catalog models into an existing vendor provider. The models land
 	// on the provider row, so they share its single API key automatically.
+	// default_model optionally promotes one of the imported models to the
+	// provider's default.
 	e.Router.POST("/api/aisw/market/import", func(ev *core.RequestEvent) error {
 		var payload struct {
-			Provider string   `json:"provider"`
-			Models   []string `json:"models"`
+			Provider     string   `json:"provider"`
+			Models       []string `json:"models"`
+			DefaultModel string   `json:"default_model,omitempty"`
 		}
 		if err := json.NewDecoder(ev.Request.Body).Decode(&payload); err != nil || payload.Provider == "" || len(payload.Models) == 0 {
 			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": "provider and models are required"})
 		}
-		result, err := store.New(pb).AddModels(payload.Provider, payload.Models)
+		s := store.New(pb)
+		result, err := s.AddModels(payload.Provider, payload.Models)
 		if err != nil || result == nil {
 			return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": "import failed: " + err.Error()})
 		}
+		if payload.DefaultModel != "" && slices.Contains(result.Models, payload.DefaultModel) {
+			result.DefaultModel = payload.DefaultModel
+			result, err = s.UpsertProvider(*result)
+			if err != nil || result == nil {
+				return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": "set default failed: " + err.Error()})
+			}
+		}
 		result.APIKey = maskAPIKey(result.APIKey)
 		return ev.JSON(http.StatusOK, result)
+	})
+
+	// Local catalog models for one provider (models.dev snapshot from the
+	// market storage — no network). Feeds the config-builder model dropdown
+	// when the vendor's own /models endpoint is unreachable or empty.
+	e.Router.GET("/api/aisw/providers/{slug}/market-models", func(ev *core.RequestEvent) error {
+		s := store.New(pb)
+		slug := ev.Request.PathValue("slug")
+		provider, err := s.GetProvider(slug)
+		if err != nil || provider == nil {
+			return ev.JSON(http.StatusNotFound, map[string]any{"ok": false, "message": "provider not found"})
+		}
+		catalog, err := market.LoadCatalog(s, market.Filter{})
+		if err != nil {
+			return ev.JSON(http.StatusInternalServerError, map[string]any{"ok": false, "message": err.Error()})
+		}
+		vendors := modelcatalog.VendorAliases(slug)
+		if len(vendors) == 0 {
+			vendors = []string{slug}
+		}
+		known := map[string]bool{}
+		for _, model := range provider.Models {
+			known[model] = true
+		}
+		models := []string{}
+		for _, item := range catalog.Items {
+			if known[item.Identifier] || !slices.ContainsFunc(vendors, func(v string) bool { return item.ProviderID == v }) {
+				continue
+			}
+			models = append(models, item.Identifier)
+		}
+		return ev.JSON(http.StatusOK, map[string]any{"models": models, "count": len(models)})
 	})
 }
 
