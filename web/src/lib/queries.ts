@@ -235,11 +235,20 @@ export function useImportMarketModels() {
   const invalidate = useInvalidate()
   const { t } = useI18n()
   return useMutation({
-    mutationFn: ({ provider, models }: { provider: string; models: string[] }) =>
-      api.importMarketModels(provider, models),
-    onSuccess: (provider, { models }) => {
+    mutationFn: ({
+      provider,
+      models,
+      defaultModel,
+    }: {
+      provider: string
+      models: string[]
+      defaultModel?: string
+    }) => api.importMarketModels(provider, models, defaultModel),
+    onSuccess: (provider, { models, defaultModel }) => {
       toast.success(t('market.importDone', { count: models.length, name: provider.name }), {
-        description: t('market.importDoneDesc'),
+        description: defaultModel
+          ? t('market.importDoneDefault', { model: defaultModel })
+          : t('market.importDoneDesc'),
       })
       invalidate(queryKeys.providers)
     },

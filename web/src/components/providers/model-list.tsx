@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Check, DatabaseZap, Eye, Plus, X } from 'lucide-react'
+import { Check, DatabaseZap, Eye, Plus, Star, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -213,6 +213,15 @@ function ModelMetaPopover({
   const [form, setForm] = useState<ModelMeta>(meta ?? {})
   const [saving, setSaving] = useState(false)
 
+  const putProvider = async (body: Record<string, unknown>) => {
+    await fetch(`/api/aisw/providers/${provider.slug}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    await qc.invalidateQueries({ queryKey: ['providers'] })
+  }
+
   const save = async () => {
     setSaving(true)
     try {
@@ -221,25 +230,44 @@ function ModelMetaPopover({
       if (!form.input_price && !form.output_price && !form.multimodal && !form.note) {
         delete nextMeta[model]
       }
-      await fetch(`/api/aisw/providers/${provider.slug}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          slug: provider.slug,
-          name: provider.name,
-          base_url: provider.base_url,
-          api_key: '',
-          api_protocol: provider.api_protocol,
-          default_model: provider.default_model,
-          models: provider.models ?? [],
-          model_meta: nextMeta,
-          variants: provider.variants,
-          active: provider.active,
-        }),
+      await putProvider({
+        slug: provider.slug,
+        name: provider.name,
+        base_url: provider.base_url,
+        api_key: '',
+        api_protocol: provider.api_protocol,
+        default_model: provider.default_model,
+        models: provider.models ?? [],
+        model_meta: nextMeta,
+        variants: provider.variants,
+        active: provider.active,
       })
       toast.success(t('meta.saved'))
       setOpen(false)
-      await qc.invalidateQueries({ queryKey: ['providers'] })
+    } catch (err) {
+      toast.error((err as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const makeDefault = async () => {
+    setSaving(true)
+    try {
+      await putProvider({
+        slug: provider.slug,
+        name: provider.name,
+        base_url: provider.base_url,
+        api_key: '',
+        api_protocol: provider.api_protocol,
+        default_model: model,
+        models: provider.models ?? [],
+        model_meta: provider.model_meta ?? {},
+        variants: provider.variants,
+        active: provider.active,
+      })
+      toast.success(t('meta.madeDefault', { model }))
+      setOpen(false)
     } catch (err) {
       toast.error((err as Error).message)
     } finally {
@@ -293,9 +321,17 @@ function ModelMetaPopover({
               onChange={(e) => setForm({ ...form, note: e.target.value })}
             />
           </Field>
-          <Button size="sm" disabled={saving} onClick={() => void save()}>
-            {t('meta.save')}
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" disabled={saving} onClick={() => void save()}>
+              {t('meta.save')}
+            </Button>
+            {model !== provider.default_model && (
+              <Button size="sm" variant="outline" disabled={saving} onClick={() => void makeDefault()}>
+                <Star data-icon="inline-start" />
+                {t('meta.makeDefault')}
+              </Button>
+            )}
+          </div>
         </FieldGroup>
       </PopoverContent>
     </Popover>

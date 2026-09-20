@@ -49,11 +49,30 @@ export function ModelCombobox({ provider, configured, value, onChange, onModelRe
     setFetching(true)
     try {
       const result = await api.remoteModels(provider)
-      if (!result.ok || !result.models?.length) {
-        toast.error(t('models.fetchFailed'), { description: result.message?.slice(0, 200) })
+      if (result.ok && result.models?.length) {
+        setRemote(result.models)
+        return
       }
-      setRemote(result.models ?? [])
+      // Vendor /models endpoint unreachable or empty — fall back to the
+      // local models.dev snapshot so the dropdown stays usable offline.
+      const local = await api.providerMarketModels(provider)
+      if (local.models?.length) {
+        setRemote(local.models)
+        toast.info(t('models.usedLocalCatalog'), { description: t('models.usedLocalCatalogDesc') })
+        return
+      }
+      toast.error(t('models.fetchFailed'), { description: result.message?.slice(0, 200) })
     } catch (err) {
+      try {
+        const local = await api.providerMarketModels(provider)
+        if (local.models?.length) {
+          setRemote(local.models)
+          toast.info(t('models.usedLocalCatalog'), { description: t('models.usedLocalCatalogDesc') })
+          return
+        }
+      } catch {
+        // fall through to the original error
+      }
       toast.error(t('models.fetchFailed'), { description: (err as Error).message })
     } finally {
       setFetching(false)

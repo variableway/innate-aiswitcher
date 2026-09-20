@@ -79,7 +79,7 @@ export interface ModelsResult {
   message: string
 }
 
-/** One lobehub market catalog entry (model with its vendor/gateway references). */
+/** One models.dev catalog entry: a vendor's model with capabilities and pricing. */
 export interface MarketModel {
   id: string
   identifier: string
@@ -91,11 +91,15 @@ export interface MarketModel {
   providerCount?: number
   contextWindowTokens?: number
   abilities?: Record<string, boolean>
+  /** USD per 1M tokens, straight from models.dev's cost object. */
+  pricing?: { input?: number; output?: number; cache_read?: number }
   knowledgeCutoff?: string
   generation?: string
   family?: string
   source?: string
   enabled?: boolean
+  releasedAt?: string
+  description?: string
 }
 
 export interface MarketCategory {

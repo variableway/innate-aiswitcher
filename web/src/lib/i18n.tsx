@@ -18,8 +18,8 @@ const dict = {
   // market page
   'market.title': { zh: '模型市场', en: 'Model Market' },
   'market.subtitle': {
-    zh: '从 lobehub 公共目录手工拉取模型参考数据；选中模型可导入厂商 Provider，共享其 API Key。',
-    en: 'Manually pull reference data from the public lobehub catalog; import selected models into a vendor provider sharing its API key.',
+    zh: '从 models.dev 开放目录拉取模型参考数据（本地备份，离线可用）；选中模型可导入厂商 Provider，共享其 API Key。',
+    en: 'Pull reference data from the open models.dev catalog (backed up locally, works offline); import selected models into a vendor provider sharing its API key.',
   },
   'market.fetch': { zh: '拉取目录', en: 'Fetch Catalog' },
   'market.fetching': { zh: '拉取中…', en: 'Fetching…' },
@@ -58,16 +58,25 @@ const dict = {
     zh: '模型共享厂商 API Key，无需重复配置。',
     en: 'Models share the vendor API key — no extra key setup.',
   },
+  'market.importDoneDefault': { zh: '已将 {model} 设为默认模型', en: '{model} is now the default model' },
+  'market.importDefault': { zh: '导入后设为默认', en: 'Set as default after import' },
+  'market.importNoDefault': { zh: '不设置', en: "Don't set" },
+  'market.importDefaultHint': {
+    zh: '从导入的模型中选一个作为该 Provider 的默认模型。',
+    en: 'Promote one of the imported models to the provider default.',
+  },
   'market.importSubmit': { zh: '导入', en: 'Import' },
   'market.empty.title': { zh: '暂无目录数据', en: 'No catalog data yet' },
   'market.empty.desc': {
-    zh: '从 lobehub 公共目录拉取模型参考数据后，即可浏览并导入。',
-    en: 'Fetch the public lobehub catalog to browse and import models.',
+    zh: '从 models.dev 开放目录拉取模型参考数据后，即可浏览并导入（数据会备份到本地，离线也能浏览）。',
+    en: 'Fetch the open models.dev catalog to browse and import models (snapshots are backed up locally and work offline).',
   },
   'market.loadFailed': { zh: '目录加载失败', en: 'Failed to load catalog' },
   'market.colModel': { zh: '模型', en: 'Model' },
   'market.colVendor': { zh: '厂商 / 网关', en: 'Vendor / Gateways' },
   'market.colContext': { zh: '上下文', en: 'Context' },
+  'market.colPrice': { zh: '价格', en: 'Price' },
+  'market.priceHint': { zh: '输入 / 输出，美元每百万 token', en: 'USD per 1M tokens (input / output)' },
   'market.colAbilities': { zh: '能力', en: 'Abilities' },
   'market.disabled': { zh: '已下线', en: 'offline' },
   'market.noProviders': { zh: '还没有可导入的厂商 Provider', en: 'No vendor providers to import into yet' },
@@ -366,6 +375,8 @@ const dict = {
   'meta.note': { zh: '备注', en: 'Note' },
   'meta.save': { zh: '保存', en: 'Save' },
   'meta.saved': { zh: '模型信息已保存', en: 'Model info saved' },
+  'meta.makeDefault': { zh: '设为默认', en: 'Set as default' },
+  'meta.madeDefault': { zh: '已将 {model} 设为默认模型', en: '{model} is now the default model' },
   'meta.confirmDelete': { zh: '确认删除', en: 'Confirm' },
   'meta.deleteHint': { zh: '再点一次删除 {model}', en: 'Click again to remove {model}' },
   'meta.editHint': { zh: '点击模型名编辑价格 / 多模态等信息', en: 'Click a model to edit pricing / modality' },
@@ -384,13 +395,18 @@ const dict = {
   // model combobox
   'models.fetch': { zh: '从 API 获取模型列表', en: 'Fetch model list from API' },
   'models.fetchFailed': { zh: '获取模型列表失败', en: 'Failed to fetch models' },
+  'models.usedLocalCatalog': { zh: '已使用本地模型目录', en: 'Using the local model catalog' },
+  'models.usedLocalCatalogDesc': {
+    zh: '厂商接口不可用或为空，已从本地 models.dev 快照读取。',
+    en: 'Vendor API unreachable or empty; served from the local models.dev snapshot.',
+  },
   'models.typeOrPick': { zh: '输入或选择模型…', en: 'Type or pick a model…' },
   'models.typeHint': {
     zh: '输入模型名后回车即可使用（自动注册到 Provider）',
     en: 'Type a model name to use it (auto-registers on the provider)',
   },
   'models.configuredGroup': { zh: '已配置', en: 'Configured' },
-  'models.remoteGroup': { zh: '来自厂商 API', en: 'From vendor API' },
+  'models.remoteGroup': { zh: '可添加（厂商 / 目录）', en: 'Available (vendor / catalog)' },
   'models.useAndAdd': { zh: '使用并添加', en: 'use & add' },
 
   // terminal page

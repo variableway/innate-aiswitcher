@@ -104,9 +104,12 @@ export const api = {
     request<MarketModelsResponse>(
       `/market/models?category=${encodeURIComponent(category)}&q=${encodeURIComponent(q)}`),
   listMarketCategories: () => request<MarketCategoriesResponse>('/market/categories'),
-  importMarketModels: (provider: string, models: string[]) =>
+  importMarketModels: (provider: string, models: string[], defaultModel?: string) =>
     request<Provider>('/market/import', {
       method: 'POST',
-      body: JSON.stringify({ provider, models }),
+      body: JSON.stringify({ provider, models, default_model: defaultModel || '' }),
     }),
+  /** Local market-catalog models for a provider (offline snapshot, no vendor API call). */
+  providerMarketModels: (slug: string) =>
+    request<{ models: string[]; count: number }>(`/providers/${encodeURIComponent(slug)}/market-models`),
 }

@@ -181,6 +181,7 @@ export function MarketPage() {
                 <TableHead>{t('market.colModel')}</TableHead>
                 <TableHead>{t('market.colVendor')}</TableHead>
                 <TableHead className="text-right">{t('market.colContext')}</TableHead>
+                <TableHead className="text-right">{t('market.colPrice')}</TableHead>
                 <TableHead>{t('market.colAbilities')}</TableHead>
               </TableRow>
             </TableHeader>
@@ -232,6 +233,12 @@ function StorageBadge({ storage }: { storage?: MarketStorage }) {
   )
 }
 
+function formatPrice(pricing?: MarketModel['pricing']): string {
+  if (pricing?.input == null && pricing?.output == null) return '—'
+  const fmt = (v?: number) => (v == null ? '—' : `$${v}`)
+  return `${fmt(pricing?.input)} / ${fmt(pricing?.output)}`
+}
+
 function MarketRow({
   model,
   checked,
@@ -279,6 +286,9 @@ function MarketRow({
       </TableCell>
       <TableCell className="text-right font-mono text-xs">
         {formatContext(model.contextWindowTokens)}
+      </TableCell>
+      <TableCell className="text-right font-mono text-xs" title={t('market.priceHint')}>
+        {formatPrice(model.pricing)}
       </TableCell>
       <TableCell>
         <div className="flex flex-wrap gap-1">
@@ -369,6 +379,7 @@ function MarketImportDialog({
   const providers = useProviders()
   const importMutation = useImportMarketModels()
   const [providerPick, setProviderPick] = useState('')
+  const [defaultPick, setDefaultPick] = useState('')
 
   const providerList = useMemo(() => providers.data ?? [], [providers.data])
   const provider = providerPick || providerList[0]?.slug || ''
@@ -377,6 +388,7 @@ function MarketImportDialog({
     onOpenChange(next)
     if (!next) {
       importMutation.reset()
+      setDefaultPick('')
       onDone()
     }
   }
@@ -409,6 +421,23 @@ function MarketImportDialog({
                 </SelectContent>
               </Select>
             </Field>
+            <Field>
+              <FieldLabel>{t('market.importDefault')}</FieldLabel>
+              <Select value={defaultPick} onValueChange={setDefaultPick}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t('market.importNoDefault')}</SelectItem>
+                  {models.map((m) => (
+                    <SelectItem key={m.identifier} value={m.identifier}>
+                      {m.identifier}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-muted-foreground text-xs">{t('market.importDefaultHint')}</p>
+            </Field>
             <div className="bg-accent/50 rounded-md p-3 font-mono text-xs">
               {models.slice(0, 8).map((m) => (
                 <div key={m.identifier} className="truncate">
@@ -428,7 +457,11 @@ function MarketImportDialog({
             disabled={!provider || models.length === 0 || importMutation.isPending || providerList.length === 0}
             onClick={() =>
               importMutation.mutate(
-                { provider, models: models.map((m) => m.identifier) },
+                {
+                  provider,
+                  models: models.map((m) => m.identifier),
+                  defaultModel: defaultPick && defaultPick !== 'none' ? defaultPick : undefined,
+                },
                 { onSuccess: () => close(false) },
               )
             }
