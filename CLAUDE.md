@@ -117,6 +117,7 @@ Custom routes in `internal/app/app.go` `registerRoutes`:
 
 - Discovery: `GET /api/aisw/health`, `GET /api/aisw/catalog`, `GET /api/aisw/agents`, `GET /api/aisw/presets`
 - Terminal: `GET /api/aisw/terminal` (WebSocket → local PTY; protocol in `internal/terminal`)
+- Model rankings: `GET /api/aisw/rankings?metric=&q=&limit=` — merged models.dev catalog + Artificial Analysis indexes (via OpenRouter) read model (`internal/modelranking`)
 - Provider CRUD: `GET/POST /api/aisw/providers`, `GET/PUT/DELETE /api/aisw/providers/{slug}`, `POST /api/aisw/providers/from-preset` (`{preset_slug, api_key}`)
 - Provider ops: `GET /api/aisw/providers/{slug}/models` (remote model listing), `POST /api/aisw/providers/{slug}/models` (`{model, default}` adds to the configured list), `DELETE /api/aisw/providers/{slug}/models/{model}`, `POST /api/aisw/providers/{slug}/test` (optional `{"model":"..."}` body)
 - Profile CRUD: `GET/POST /api/aisw/profiles`, `PUT/DELETE /api/aisw/profiles/{slug}`

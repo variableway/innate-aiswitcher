@@ -10,6 +10,7 @@ import {
   SquareTerminal,
   Store,
   Sun,
+  Trophy,
   Zap,
 } from 'lucide-react'
 import { Toaster } from '@/components/ui/sonner'
@@ -33,6 +34,7 @@ const NAV: { to: string; labelKey: TranslationKey; icon: typeof Plug }[] = [
   { to: '/terminal', labelKey: 'nav.terminal', icon: SquareTerminal },
   { to: '/configs', labelKey: 'nav.configs', icon: FileCode2 },
   { to: '/market', labelKey: 'nav.market', icon: Store },
+  { to: '/rankings', labelKey: 'nav.rankings', icon: Trophy },
 ]
 
 function ThemeToggle() {

@@ -11,6 +11,7 @@ export const queryKeys = {
   market: (category: string, q: string) => ['market', category, q] as const,
   marketCategories: ['market-categories'] as const,
   marketSettings: ['market-settings'] as const,
+  rankings: (metric: string, q: string) => ['rankings', metric, q] as const,
 }
 
 export function useProviders() {
@@ -192,6 +193,14 @@ export function useMarketModels(category: string, q: string) {
   return useQuery({
     queryKey: queryKeys.market(category, q),
     queryFn: () => api.listMarketModels(category, q),
+    placeholderData: (prev) => prev,
+  })
+}
+
+export function useRankings(metric: string, q: string) {
+  return useQuery({
+    queryKey: queryKeys.rankings(metric, q),
+    queryFn: () => api.listRankings(metric, q),
     placeholderData: (prev) => prev,
   })
 }
