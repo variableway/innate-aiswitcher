@@ -1,4 +1,4 @@
-import type { Agent, AgentConfigFile, AgentConfigInfo, ConfigPreview, InstalledAgent, MarketCategoriesResponse, MarketFetchResponse, MarketModelsResponse, MarketSettings, ModelsResult, Preset, Profile, Provider, TestResult } from './types'
+import type { Agent, AgentConfigFile, AgentConfigInfo, ConfigPreview, InstalledAgent, MarketCategoriesResponse, MarketFetchResponse, MarketModelsResponse, MarketSettings, ModelsResult, Preset, Profile, Provider, RankingsResponse, TestResult } from './types'
 
 const API = '/api/aisw'
 
@@ -112,4 +112,8 @@ export const api = {
   /** Local market-catalog models for a provider (offline snapshot, no vendor API call). */
   providerMarketModels: (slug: string) =>
     request<{ models: string[]; count: number }>(`/providers/${encodeURIComponent(slug)}/market-models`),
+
+  /** Merged model rankings: models.dev catalog × Artificial Analysis indexes, sorted server-side. */
+  listRankings: (metric: string, q: string) =>
+    request<RankingsResponse>(`/rankings?metric=${encodeURIComponent(metric)}&q=${encodeURIComponent(q)}`),
 }

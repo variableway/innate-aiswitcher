@@ -30,6 +30,7 @@ import (
 	"github.com/variableway/innate-aiswitcher/internal/httpcheck"
 	"github.com/variableway/innate-aiswitcher/internal/market"
 	"github.com/variableway/innate-aiswitcher/internal/modelcatalog"
+	"github.com/variableway/innate-aiswitcher/internal/modelranking"
 	"github.com/variableway/innate-aiswitcher/internal/projectconfig"
 	"github.com/variableway/innate-aiswitcher/internal/providerconfig"
 	"github.com/variableway/innate-aiswitcher/internal/store"
@@ -216,6 +217,8 @@ func registerRoutes(pb *pocketbase.PocketBase, opts Options) {
 			registerPresetRoutes(e, pb)
 			// Model market catalog (models.dev, locally snapshotted)
 			registerMarketRoutes(e, pb)
+			// Model rankings (models.dev + Artificial Analysis scores)
+			registerRankingRoutes(e, pb)
 
 			// Serve the web app (Vite + React SPA) with client-side routing
 			// fallback. The mux resolves registered API routes first (most
@@ -740,6 +743,29 @@ func registerMarketRoutes(e *core.ServeEvent, pb *pocketbase.PocketBase) {
 // package so REST, CLI and TUI surfaces mask keys identically.
 func maskAPIKey(key string) string {
 	return tui.MaskAPIKey(key)
+}
+
+// registerRankingRoutes exposes the merged model-ranking read model: the
+// models.dev catalog enriched with independent Artificial Analysis scores
+// (redistributed by OpenRouter) and vendor-reported benchmarks. Read-only;
+// the merged snapshot is cached in-process for an hour.
+func registerRankingRoutes(e *core.ServeEvent, pb *pocketbase.PocketBase) {
+	e.Router.GET("/api/aisw/rankings", func(ev *core.RequestEvent) error {
+		query := ev.Request.URL.Query()
+		limit, _ := strconv.Atoi(query.Get("limit"))
+		result, err := modelranking.Load(ev.Request.Context(), modelranking.Filter{
+			Metric: query.Get("metric"),
+			Query:  query.Get("q"),
+			Limit:  limit,
+		})
+		if err != nil {
+			if errors.Is(err, modelranking.ErrUnknownMetric) {
+				return ev.JSON(http.StatusBadRequest, map[string]any{"ok": false, "message": err.Error()})
+			}
+			return ev.JSON(http.StatusBadGateway, map[string]any{"ok": false, "message": err.Error()})
+		}
+		return ev.JSON(http.StatusOK, result)
+	})
 }
 
 func providerCommand(getPB PBGetter) *cobra.Command {

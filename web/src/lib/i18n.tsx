@@ -14,6 +14,7 @@ const dict = {
   'nav.terminal': { zh: '终端', en: 'Terminal' },
   'nav.configs': { zh: '配置文件', en: 'Configs' },
   'nav.market': { zh: '模型市场', en: 'Model Market' },
+  'nav.rankings': { zh: '模型排名', en: 'Model Rankings' },
 
   // market page
   'market.title': { zh: '模型市场', en: 'Model Market' },
@@ -80,6 +81,105 @@ const dict = {
   'market.colAbilities': { zh: '能力', en: 'Abilities' },
   'market.disabled': { zh: '已下线', en: 'offline' },
   'market.noProviders': { zh: '还没有可导入的厂商 Provider', en: 'No vendor providers to import into yet' },
+
+  // rankings page
+  'rankings.title': { zh: '模型排名', en: 'Model Rankings' },
+  'rankings.subtitle': {
+    zh: 'models.dev 开放目录 × Artificial Analysis 独立评测指数（经 OpenRouter 免费转发），按指标排序；同一来源内分数才可比较。',
+    en: 'The open models.dev catalog crossed with independent Artificial Analysis indexes (redistributed by OpenRouter), ranked per metric; scores only compare within their own source.',
+  },
+  'rankings.metricsInfo': { zh: '指标说明', en: 'About metrics' },
+  'rankings.metricsInfoDesc': {
+    zh: '每个指标的来源、排序方向与可信度说明。',
+    en: 'Source, sort direction and reliability notes for every metric.',
+  },
+  'rankings.searchPlaceholder': { zh: '搜索模型 / 厂商…', en: 'Search models / vendors…' },
+  'rankings.total': { zh: '{count} 个条目', en: '{count} entries' },
+  'rankings.showing': { zh: '显示前 {count} 个', en: 'showing top {count}' },
+  'rankings.fetchedAt': { zh: '数据时间：{time}', en: 'Data as of: {time}' },
+  'rankings.sourceDegraded': { zh: '{name} 不可用，分数缺失', en: '{name} unavailable, scores missing' },
+  'rankings.loadFailed': { zh: '排名加载失败', en: 'Failed to load rankings' },
+  'rankings.empty.title': { zh: '没有匹配的条目', en: 'No matching entries' },
+  'rankings.empty.desc': {
+    zh: '换个关键词，或切换到其他指标试试。',
+    en: 'Try another keyword or switch to a different metric.',
+  },
+  'rankings.empty.reset': { zh: '清除搜索', en: 'Clear search' },
+  'rankings.colModel': { zh: '模型', en: 'Model' },
+  'rankings.colVendor': { zh: '厂商', en: 'Vendor' },
+  'rankings.colPriceIn': { zh: '输入价', en: 'In $/1M' },
+  'rankings.colPriceOut': { zh: '输出价', en: 'Out $/1M' },
+  'rankings.colAbilities': { zh: '能力', en: 'Abilities' },
+  'rankings.colReleased': { zh: '发布', en: 'Released' },
+  'rankings.knowledge': { zh: '知识截止', en: 'Knowledge cutoff' },
+
+  'rankings.metric.coding': { zh: '编码指数', en: 'Coding' },
+  'rankings.metric.intelligence': { zh: '智能指数', en: 'Intelligence' },
+  'rankings.metric.agentic': { zh: 'Agentic', en: 'Agentic' },
+  'rankings.metric.price_input': { zh: '输入价格', en: 'Input price' },
+  'rankings.metric.price_output': { zh: '输出价格', en: 'Output price' },
+  'rankings.metric.context': { zh: '上下文窗口', en: 'Context' },
+  'rankings.metric.output_limit': { zh: '最大输出', en: 'Max output' },
+  'rankings.metric.released': { zh: '最新发布', en: 'Newest' },
+
+  'rankings.desc.coding': {
+    zh: 'Artificial Analysis 的编码能力指数：独立第三方用统一评测集跑出的分数，经 OpenRouter 模型 API 免费转发。可信度高，适合编码场景选型。',
+    en: 'Artificial Analysis coding index: independent third-party scores from a unified evaluation harness, redistributed free via the OpenRouter models API. High reliability for coding-oriented choices.',
+  },
+  'rankings.desc.intelligence': {
+    zh: 'Artificial Analysis 的综合智能指数：跨任务的独立统一评测，反映模型整体能力，经 OpenRouter 免费转发。',
+    en: 'Artificial Analysis intelligence index: an independent cross-task unified evaluation of overall model capability, redistributed via OpenRouter.',
+  },
+  'rankings.desc.agentic': {
+    zh: 'Artificial Analysis 的 Agentic/工具调用指数：衡量工具使用与多步任务能力，经 OpenRouter 免费转发。',
+    en: 'Artificial Analysis agentic index: tool-use and multi-step task ability, redistributed via OpenRouter.',
+  },
+  'rankings.desc.price_input': {
+    zh: 'models.dev 目录收录的输入价格（美元 / 百万 token），为厂商牌价，非某个网关的转售价。',
+    en: 'Listed input price per 1M tokens (USD) from the models.dev directory — vendor list prices, not gateway resale prices.',
+  },
+  'rankings.desc.price_output': {
+    zh: 'models.dev 目录收录的输出价格（美元 / 百万 token），同样为厂商牌价。',
+    en: 'Listed output price per 1M tokens (USD) from the models.dev directory.',
+  },
+  'rankings.desc.context': {
+    zh: '上下文窗口大小（models.dev 目录数据）；长上下文任务的硬性规格。',
+    en: 'Context window size in tokens (models.dev directory); a hard spec for long-context work.',
+  },
+  'rankings.desc.output_limit': {
+    zh: '单次最大输出 token 数（models.dev 目录数据）。',
+    en: 'Maximum output tokens per request (models.dev directory).',
+  },
+  'rankings.desc.released': {
+    zh: '模型发布日期（models.dev 目录数据），新模型通常能力更强但生态验证少。',
+    en: 'Model release date (models.dev directory); newer models tend to be stronger but less battle-tested.',
+  },
+  'rankings.source.artificial_analysis': {
+    zh: '独立评测（Artificial Analysis）',
+    en: 'Independent evaluation (Artificial Analysis)',
+  },
+  'rankings.source.models_dev': { zh: '目录数据（models.dev）', en: 'Directory data (models.dev)' },
+  'rankings.dir.asc': { zh: '越低越好', en: 'lower is better' },
+  'rankings.dir.desc': { zh: '越高越好', en: 'higher is better' },
+  'rankings.compareRule': {
+    zh: '注意：不同来源的分数不可横向比较或混合平均；排名仅在所选指标内部有效。',
+    en: 'Note: scores from different sources are not comparable and must not be averaged together; each ranking is valid only within its own metric.',
+  },
+
+  'rankings.ability.reasoning': { zh: '推理', en: 'reasoning' },
+  'rankings.ability.tools': { zh: '工具', en: 'tools' },
+  'rankings.ability.vision': { zh: '视觉', en: 'vision' },
+  'rankings.ability.openWeights': { zh: '开放权重', en: 'open weights' },
+
+  'rankings.vendorBenchTitle': { zh: '厂商自报评测', en: 'Vendor-reported benchmarks' },
+  'rankings.vendorBenchDisclaimer': {
+    zh: '以下分数来自厂商自己的发布页（非独立评测），各家测试方法与提示词不同，不可横向比较，仅供参考。',
+    en: 'These scores come from the vendor\'s own announcements (not independent evaluation); harnesses and prompts differ per vendor, so they are not cross-comparable.',
+  },
+  'rankings.noBenchmarks': { zh: '该模型暂无厂商自报评测数据', en: 'No vendor-reported benchmarks for this model' },
+  'rankings.bench.colName': { zh: '基准', en: 'Benchmark' },
+  'rankings.bench.colScore': { zh: '分数', en: 'Score' },
+  'rankings.bench.colSource': { zh: '来源', en: 'Source' },
 
   // common
   'common.cancel': { zh: '取消', en: 'Cancel' },

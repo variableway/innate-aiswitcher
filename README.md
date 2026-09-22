@@ -174,7 +174,7 @@ Web UI 与 CLI 共享 `~/.innate-aiswitcher/pb_data/` 中的同一数据库，�
 
 | Preset | 协议端点 (variants) | 模型 | 服务 Agent |
 | --- | --- | --- | --- |
-| `glm` (Volcengine Ark) | `anthropic`: `https://ark.cn-beijing.volces.com/api/plan` · `openai_chat`: `https://ark.cn-beijing.volces.com/api/v3` | `glm-5.2`, `glm-5.3` | claude / codex / opencode |
+| `glm` (Volcengine Ark) | `anthropic`: `https://ark.cn-beijing.volces.com/api/plan` · `openai_chat`: `https://ark.cn-beijing.volces.com/api/v3` | `glm-5.2`, `glm-5.3`, `glm-5.3-flash` | claude / codex / opencode |
 | `minimax` | `anthropic`: `https://api.minimaxi.com/anthropic` · `openai_responses` / `openai_chat`: `https://api.minimaxi.com/v1` | `MiniMax-M3` | claude / codex / opencode |
 
 > codex 优先使用 `openai_responses`，厂商没有该端点时自动回落到 `openai_chat`（wire_api = chat）。以 `minimax` 为例，一把 key 同时驱动三个 Agent：

@@ -389,6 +389,45 @@ POST /api/aisw/market/import
 
 ---
 
+## Model Rankings
+
+跨源合并的模型排名读模型：models.dev 目录（能力/价格/上下文）+ Artificial Analysis 独立评测指数（经 OpenRouter `/api/v1/models` 免费转发，按 model id 关联到所有提供该模型的厂商条目）+ models.dev models.json 厂商自报 benchmark（仅展示，带来源链接，不参与排序）。快照在进程内缓存 1 小时。
+
+### List Rankings
+
+```http
+GET /api/aisw/rankings?metric=coding&q=glm&limit=100
+```
+
+**Query params:**
+
+- `metric` — 指标 id，缺省 `coding`；取值见响应 `metrics` 目录：`coding` / `intelligence` / `agentic`（AA 独立评测指数，降序）、`price_input` / `price_output`（$/1M，升序）、`context` / `output_limit`（token 数，降序）、`released`（发布日期，最新优先）。未知值返回 400。
+- `q` — 对 provider/model 名称做大小写不敏感子串过滤。
+- `limit` — 返回条数，缺省 100，上限 500；`total` 始终是过滤后的总数。
+
+**Response:**
+
+```json
+{
+  "metrics": [{ "id": "coding", "name": "AA Coding Index", "source": "artificial_analysis", "direction": "desc", "unit": "index", "description": "…" }],
+  "metric": "coding",
+  "items": [{
+    "providerId": "zhipuai", "providerName": "Zhipu AI", "modelId": "glm-5.3", "name": "GLM-5.3",
+    "intelligence": 44.8, "coding": 74.8, "agentic": 51.2,
+    "inputPrice": 0.6, "outputPrice": 2.2, "context": 256000, "outputLimit": 65536,
+    "openWeights": true, "reasoning": true, "toolCall": true, "attachment": false,
+    "knowledge": "2026-07", "releaseDate": "2026-08-01",
+    "benchmarks": [{ "name": "SWE-Bench Pro", "score": 63.5, "metric": "resolve rate", "source": "https://…", "date": "2026-08-01" }]
+  }],
+  "total": 7870, "fetchedAt": "2026-09-20T20:00:00Z",
+  "sources": [{ "id": "openrouter", "name": "OpenRouter (Artificial Analysis scores)", "url": "https://…", "ok": true }]
+}
+```
+
+无对应指标值的条目沉底排序。OpenRouter 或 models.json 拉取失败时请求仍然成功（`sources` 里对应条目 `ok=false`，前端显示降级徽章）；models.dev 目录本身失败返回 502。
+
+---
+
 ## PocketBase Collection Endpoints (Read-Only)
 
 标准 PocketBase REST，仅公开读权限：

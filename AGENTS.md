@@ -131,6 +131,7 @@ Custom routes under `/api/aisw/...` (full reference: `docs/API.md`):
 - Provider CRUD + ops: `GET/POST/PUT/DELETE /api/aisw/providers[/{slug}]`, `POST .../from-preset`, `GET/POST/DELETE .../models[/{model}]`, `POST .../test`
 - Profile CRUD: `GET/POST/PUT/DELETE /api/aisw/profiles[/{slug}]`
 - Terminal: `GET /api/aisw/terminal` (WebSocket → local PTY)
+- Model rankings: `GET /api/aisw/rankings?metric=&q=&limit=` — models.dev catalog merged with Artificial Analysis indexes via OpenRouter (`internal/modelranking`, snapshot cached 1h)
 - `GET /` serves the embedded SPA with fallback; unmatched `/api/*` returns 404
 - PocketBase collection reads: `GET /api/collections/{agents|providers|profiles}/records`; admin UI off by default (`--admin-ui --show-admin-banner` to enable)
 

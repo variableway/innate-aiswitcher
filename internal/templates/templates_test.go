@@ -41,13 +41,13 @@ var _ = Describe("vendor provider presets", func() {
 			preset, err := FindPreset("glm")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(PresetProtocols(*preset)).To(Equal([]string{"anthropic", "openai_chat"}))
-			Expect(preset.DefaultModel).To(Equal("glm-5.2"))
+			Expect(preset.DefaultModel).To(Equal("glm-5.3"))
 		})
 
-		It("ships glm-5.2 and glm-5.3 sharing one key", func() {
+		It("ships glm-5.2, glm-5.3 and glm-5.3-flash sharing one key", func() {
 			preset, err := FindPreset("glm")
 			Expect(err).NotTo(HaveOccurred())
-			Expect(preset.Models).To(ConsistOf("glm-5.2", "glm-5.3"))
+			Expect(preset.Models).To(ConsistOf("glm-5.2", "glm-5.3", "glm-5.3-flash"))
 		})
 	})
 
@@ -75,8 +75,8 @@ var _ = Describe("vendor provider presets", func() {
 			Expect(provider.Slug).To(Equal("glm"))
 			Expect(provider.Name).To(Equal("GLM (Volcengine Ark)"))
 			Expect(provider.APIKey).To(Equal("ark-key"))
-			Expect(provider.DefaultModel).To(Equal("glm-5.2"))
-			Expect(provider.Models).To(ConsistOf("glm-5.2", "glm-5.3"))
+			Expect(provider.DefaultModel).To(Equal("glm-5.3"))
+			Expect(provider.Models).To(ConsistOf("glm-5.2", "glm-5.3", "glm-5.3-flash"))
 			Expect(provider.Variants).To(HaveLen(2))
 			Expect(provider.Active).To(BeTrue())
 		})

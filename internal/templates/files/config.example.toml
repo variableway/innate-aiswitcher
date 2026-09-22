@@ -11,8 +11,8 @@ version = 1
 slug = "glm"
 name = "GLM (Volcengine Ark)"
 api_key = "" # fill via CLI/TUI/Web, keep out of shared files
-default_model = "glm-5.2"
-models = ["glm-5.2", "glm-5.3"]
+default_model = "glm-5.3"
+models = ["glm-5.2", "glm-5.3", "glm-5.3-flash"]
 active = true
 
 [providers.variants.anthropic]

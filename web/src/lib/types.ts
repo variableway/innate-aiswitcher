@@ -130,6 +130,68 @@ export interface MarketCategoriesResponse {
   hasData: boolean
 }
 
+/** One rankable indicator served by GET /api/aisw/rankings. */
+export interface RankingMetric {
+  id: string
+  name: string
+  /** "artificial_analysis" (independent evaluation) or "models_dev" (directory data). */
+  source: string
+  direction: 'desc' | 'asc'
+  unit?: string
+  description: string
+}
+
+/** One vendor-reported benchmark score (models.dev models.json) — a vendor claim, not an independent measurement. */
+export interface VendorBenchmark {
+  name: string
+  score: number
+  metric?: string
+  source?: string
+  date?: string
+  harness?: string
+  version?: string
+}
+
+/** One provider-served model with every ranking metric attached. */
+export interface RankingItem {
+  providerId: string
+  providerName: string
+  modelId: string
+  name: string
+  intelligence?: number
+  coding?: number
+  agentic?: number
+  /** USD per 1M tokens. */
+  inputPrice?: number
+  outputPrice?: number
+  context?: number
+  outputLimit?: number
+  openWeights?: boolean
+  reasoning?: boolean
+  toolCall?: boolean
+  attachment?: boolean
+  knowledge?: string
+  releaseDate?: string
+  benchmarks?: VendorBenchmark[]
+}
+
+export interface RankingSource {
+  id: string
+  name: string
+  url?: string
+  ok: boolean
+  detail?: string
+}
+
+export interface RankingsResponse {
+  metrics: RankingMetric[]
+  metric: string
+  items: RankingItem[]
+  total: number
+  fetchedAt: string
+  sources: RankingSource[]
+}
+
 export interface MarketFetchResponse {
   ok: boolean
   fetched: number

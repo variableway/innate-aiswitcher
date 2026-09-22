@@ -6,6 +6,7 @@ import { TerminalPage } from '@/pages/terminal'
 import { ConfigsPage } from '@/pages/configs'
 import { AgentsPage } from '@/pages/agents'
 import { MarketPage } from '@/pages/market'
+import { RankingsPage } from '@/pages/rankings'
 
 const rootRoute = createRootRoute({
   component: AppShell,
@@ -52,13 +53,19 @@ const marketRoute = createRoute({
   component: MarketPage,
 })
 
+const rankingsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/rankings',
+  component: RankingsPage,
+})
+
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
   component: () => <Navigate to="/providers" />,
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, agentsRoute, providersRoute, profilesRoute, terminalRoute, configsRoute, marketRoute])
+const routeTree = rootRoute.addChildren([indexRoute, agentsRoute, providersRoute, profilesRoute, terminalRoute, configsRoute, marketRoute, rankingsRoute])
 
 export const router = createRouter({ routeTree })
 
