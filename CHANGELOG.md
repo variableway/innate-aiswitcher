@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Model Rankings page** (`/rankings`): the models.dev catalog merged with independent Artificial Analysis indexes (intelligence/coding/agentic, redistributed keyless via OpenRouter's models API) into a sortable read model — metric tabs, search, source-health badges, and per-model vendor-reported benchmarks (with source links and an independent-evaluation disclaimer) in a detail dialog. New `internal/modelranking` package (snapshot cached in-process 1h) and REST `GET /api/aisw/rankings?metric=&q=&limit=`; scores attach by model id across every provider serving the model, and scores from different sources are never mixed.
 - **Model Market page** (`/market`): manually pull the public lobehub model catalog (tRPC `market.getModelList`/`getModelCategories`, ~1000 models across ~75 vendors) from the Web UI. Fetched snapshots persist per configuration — SQLite (new `market_models` collection via migration) and/or a JSON file (`~/.innate-aiswitcher/market/models.json`, `AISW_MARKET_DIR` override) — configured through the unused-until-now `settings` KV collection (`GET/PUT /api/aisw/market/settings`). Selected models import into an existing vendor provider in one upsert (`Store.AddModels`, REST `POST /api/aisw/market/import`), joining its model list and sharing its single API key automatically. New `internal/market` client package with unit tests over a fake tRPC server.
 - **TUI: "Import models from market"** action — pick a vendor provider, search the local catalog snapshot (fetched on demand when absent), multi-select models (type-to-filter), and import them in one upsert sharing the provider key. The catalog load/fetch logic lives in `internal/market` (`LoadCatalog`/`FetchAndStore`) and is shared by the REST routes and the TUI.
 
@@ -29,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **glm preset (Volcengine Ark)**: default model is now `glm-5.3`; `glm-5.3-flash` joins the model list.
 - **`task build` is now the full build**: it always builds the web frontend first and embeds the fresh output, so a binary with the placeholder page can no longer be produced by accident. The separate `task build:full` task is removed (`task build` replaces it).
 - **Vendor-centric providers ("LLM Provider Config")**: one provider row per vendor (e.g. `glm`, `minimax`) with a single `api_key`, a `models` list, and per-protocol `variants` (`anthropic` / `openai_responses` / `openai_chat`). New package `internal/providerconfig` resolves the agent adapter onto the matching variant at launch, so one API key powers claude code, codex and opencode at once.
   - `providers` collection gains `models` (JSON list) and `variants` (JSON map) fields via migration `1780993000`; legacy single-protocol rows keep working.
